@@ -51,6 +51,24 @@ export class KVCache {
   }
 }
 
+// Convert snake_case args into camelCase args.
+export function baseModelArgs(args) {
+  const newArgs = {}
+  for (const key in args) {
+    const newKey = key.replace(/(\_\w)/g, (s) => s[1].toUpperCase())
+    newArgs[newKey] = args[key]
+  }
+  return newArgs
+}
+
+// Create an additive causal mask.
+export function createAdditiveCausalMask(N, offset = 0) {
+  const rinds = mx.arange(offset + N)
+  const linds = offset ? mx.arange(offset, offset + N) : rinds
+  const mask = mx.less(linds.index(mx.Slice(), null), rinds.index(null))
+  return mx.multiply(mask, -1e9)
+}
+
 // Return a tokenizer.
 export async function loadTokenizer(dir) {
   return TokenizerLoader.fromPreTrained({

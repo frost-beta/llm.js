@@ -1,5 +1,26 @@
 import {core as mx, nn} from '@frost-beta/mlx'
-import {KVCache} from '../llm.js'
+import {KVCache, baseModelArgs, createAdditiveCausalMask} from '../llm.js'
+
+function modelArgs(args) {
+  args = Object.assign({
+    attentionBias: false,
+    mlpBias: false,
+    ropeTheta: 10000,
+    ropeTraditional: false,
+    tieWordEmbeddings: true,
+  }, baseModelArgs(args))
+  if (!args.numKeyValueHeads) {
+    args.numKeyValueHeads = args.numAttentionHeads
+  }
+  if (args.ropeScaling) {
+    const requiredKeys = [ 'factor', 'type' ]
+    if (!Object.keys(args.ropeScaling).every(key => requiredKeys.includes(key)))
+      throw Error(`rope_scaling must contain keys ${requiredKeys}`)
+    if (this.ropeScaling.type != 'linear')
+      throw Error("rope_scaling 'type' currently only supports 'linear'")
+  }
+  return args
+}
 
 class Attention extends nn.Module {
   constructor(args) {
@@ -11,10 +32,10 @@ class Attention extends nn.Module {
     const headDim = Math.floor(args.hiddenSize / this.nHeads)
     this.scale = headDim ** -0.5
 
-    this.qProj = new nn.Linear(dim, this.nHeads * headDim, false)
-    this.kProj = new nn.Linear(dim, this.nKVHeads * headDim, false)
-    this.vProj = new nn.Linear(dim, this.nKVHeads * headDim, false)
-    this.oProj = new nn.Linear(this.nHeads * headDim, dim, false)
+    this.qProj = new nn.Linear(dim, this.nHeads * headDim, args.attentionBias)
+    this.kProj = new nn.Linear(dim, this.nKVHeads * headDim, args.attentionBias)
+    this.vProj = new nn.Linear(dim, this.nKVHeads * headDim, args.attentionBias)
+    this.oProj = new nn.Linear(this.nHeads * headDim, dim, args.attentionBias)
 
     const ropeScale = args.ropeScaling?.type == 'linear' ? 1 / args.ropeScaling.factor
                                                          : 1
@@ -49,11 +70,16 @@ class Attention extends nn.Module {
 }
 
 class MLP extends nn.Module {
-  constructor(dim, hiddenDim) {
+  constructor(args) {
     super()
-    this.gateProj = new nn.Linear(dim, hiddenDim, false)
-    this.downProj = new nn.Linear(hiddenDim, dim, false)
-    this.upProj = new nn.Linear(dim, hiddenDim, false)
+
+    const dim = args.hiddenSize
+    const hiddenDim = args.intermediateSize
+    const mlpBias = args.mlpBias
+
+    this.gateProj = new nn.Linear(dim, hiddenDim, mlpBias)
+    this.downProj = new nn.Linear(hiddenDim, dim, mlpBias)
+    this.upProj = new nn.Linear(dim, hiddenDim, mlpBias)
   }
 
   forward(x) {
@@ -68,7 +94,7 @@ class TransformerBlock extends nn.Module {
     this.numAttentionHeads = args.numAttentionHeads
     this.hiddenSize = args.hiddenSize
     this.selfAttn = new Attention(args)
-    this.mlp = new MLP(args.hiddenSize, args.intermediateSize)
+    this.mlp = new MLP(args)
     this.inputLayernorm = new nn.RMSNorm(args.hiddenSize, args.rmsNormEps)
     this.postAttentionLayernorm = new nn.RMSNorm(args.hiddenSize, args.rmsNormEps)
   }
@@ -118,12 +144,16 @@ export class Model extends nn.Module {
     this.args = args
     this.modelType = args.modelType
     this.model = new LlamaModel(args)
-    this.lmHead = new nn.Linear(args.hiddenSize, args.vocabSize, false)
+    if (!args.tieWordEmbeddings)
+      this.lmHead = new nn.Linear(args.hiddenSize, args.vocabSize, false)
   }
 
   forward(inputs, cache) {
     const out = this.model.forward(inputs, cache)
-    return this.lmHead.forward(out)
+    if (this.args.tieWordEmbeddings)
+      return this.model.embedTokens.asLinear.forward(out)
+    else
+      return this.lmHead.forward(out)
   }
 
   get layers() {
@@ -136,49 +166,5 @@ export class Model extends nn.Module {
 
   get nKVHeads() {
     return this.args.numKeyValueHeads
-  }
-}
-
-function createAdditiveCausalMask(N, offset = 0) {
-  const rinds = mx.arange(offset + N)
-  const linds = offset ? mx.arange(offset, offset + N) : rinds
-  const mask = mx.less(linds.index(mx.Slice(), null), rinds.index(null))
-  return mx.multiply(mask, -1e9)
-}
-
-function modelArgs({model_type,
-                    hidden_size,
-                    num_hidden_layers,
-                    intermediate_size,
-                    num_attention_heads,
-                    rms_norm_eps,
-                    vocab_size,
-                    num_key_value_heads = null,
-                    rope_theta = 10000,
-                    rope_traditional = false,
-                    rope_scaling = null}) {
-  if (vocab_size <= 0)
-    throw new Error('vocabSize must be bigger than zero')
-  if (rope_scaling) {
-    const requiredKeys = [ 'factor', 'type' ]
-    if (!Object.keys(rope_scaling).every(key => requiredKeys.includes(key))) {
-      throw Error(`rope_scaling must contain keys ${requiredKeys}`)
-    }
-    if (rope_scaling.type != 'linear') {
-      throw Error("rope_scaling 'type' currently only supports 'linear'")
-    }
-  }
-  return {
-    modelType: model_type,
-    hiddenSize: hidden_size,
-    numHiddenLayers: num_hidden_layers,
-    intermediateSize: intermediate_size,
-    numAttentionHeads: num_attention_heads,
-    rmsNormEps: rms_norm_eps,
-    vocabSize: vocab_size,
-    numKeyValueHeads: num_key_value_heads ?? num_attention_heads,
-    ropeTheta: rope_theta,
-    ropeTraditional: rope_traditional,
-    ropeScaling: rope_scaling,
   }
 }
