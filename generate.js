@@ -36,7 +36,9 @@ async function main(dir, prompt) {
 
   // Encode prompt or just use BOS.
   prompt = prompt ? tokenizer.encode(prompt) : [bosToken]
-  if (prompt[prompt.length - 1] === eosToken)
+  // Some tokenizers append EOS to the encoded text, remove it otherwise the
+  // generation might stop there.
+  if (prompt.length > 1 && prompt[prompt.length - 1] === eosToken)
     prompt = prompt.slice(0, -1)
 
   // Generation.
