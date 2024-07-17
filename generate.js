@@ -13,7 +13,7 @@ const argv = process.argv.slice(2).filter((arg) => {
 })
 
 if (argv.length < 1) {
-  console.error('Usage: llama3-generate /path/to/weights/dir [--max-tokens=1024] [prompt]')
+  console.error('Usage: llm-generate /path/to/weights/dir [--max-tokens=1024] [prompt]')
   process.exit(0)
 }
 

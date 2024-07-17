@@ -1,24 +1,23 @@
 {
-  "name": "llama3",
+  "name": "@frost-beta/llm",
   "version": "0.0.1-dev",
   "main": "llm.js",
   "type": "module",
   "bin": {
-    "llama3-chat": "chat.js",
-    "llama3-generate": "generate.js"
+    "llm-chat": "chat.js",
+    "llm-generate": "generate.js"
   },
   "author": "zcbenz",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/frost-beta/llama3.js.git"
+    "url": "git+https://github.com/frost-beta/llm.js.git"
   },
   "bugs": {
-    "url": "https://github.com/frost-beta/llama3.js/issues"
+    "url": "https://github.com/frost-beta/llm.js/issues"
   },
   "dependencies": {
     "@frost-beta/mlx": "0.0.14",
-    "@lenml/tokenizer-llama3": "1.0.10",
     "@lenml/tokenizers": "1.0.9",
     "tick-promise": "1.0.0"
   },

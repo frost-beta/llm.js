@@ -1,17 +1,58 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import nextTick from 'tick-promise'
-import {existsSync} from 'node:fs'
 import {TokenizerLoader} from '@lenml/tokenizers'
-import {fromPreTrained} from '@lenml/tokenizer-llama3'
 import {core as mx, nn} from '@frost-beta/mlx'
 
-import {KVCache, Model} from './model.js'
+// A design of KV cache friendly to MLX's memory cache design, which allocates
+// arrays in same shapes.
+// See also https://github.com/ml-explore/mlx-examples/issues/724.
+export class KVCache {
+  constructor(headDim, nKVHeads) {
+    this.nKVHeads = nKVHeads
+    this.headDim = headDim
+    this.keys = null
+    this.values = null
+    this.offset = 0
+    this.step = 256
+  }
+
+  updateAndFetch(keys, values) {
+    const prev = this.offset
+    if (!this.keys || (prev + keys.shape[2] > this.keys.shape[2])) {
+      const nSteps = Math.floor((this.step + keys.shape[2] - 1) / this.step)
+      const shape = [1, this.nKVHeads, nSteps * this.step, this.headDim]
+      const newK = mx.zeros(shape, keys.dtype)
+      const newV = mx.zeros(shape, values.dtype)
+      if (this.keys) {
+        const old = [this.keys, this.values]
+        if (prev % this.step != 0) {
+          const get = ['...', mx.Slice(null, prev), mx.Slice()]
+          this.keys = this.keys.index(get)
+          this.values = this.values.index(get)
+        }
+        this.keys = mx.concatenate([this.keys, newK], 2)
+        this.values = mx.concatenate([this.values, newV], 2)
+        mx.dispose(old)
+      } else {
+        this.keys = newK
+        this.values = newV
+      }
+    }
+
+    this.offset += keys.shape[2]
+
+    const insert = ['...', mx.Slice(prev, this.offset), mx.Slice()]
+    this.keys.indexPut_(insert, keys)
+    this.values.indexPut_(insert, values)
+
+    const get = ['...', mx.Slice(null, this.offset), mx.Slice()]
+    return [this.keys.index(...get), this.values.index(...get)]
+  }
+}
 
 // Return a tokenizer.
 export async function loadTokenizer(dir) {
-  if (!existsSync(path.join(dir, 'tokenizer_config.json')))
-    return fromPreTrained()
   return TokenizerLoader.fromPreTrained({
     tokenizerJSON: JSON.parse(await fs.readFile(path.join(dir, 'tokenizer.json'))),
     tokenizerConfig: JSON.parse(await fs.readFile(path.join(dir, 'tokenizer_config.json'))),
@@ -29,7 +70,17 @@ export async function loadModel(dir) {
   }
 
   // Create llama3 model.
-  const model = new Model(config)
+  let model
+  try {
+    const {Model} = await import(`./models/${config.model_type}.js`)
+    model = new Model(config)
+  } catch (error) {
+    if (error.code == 'ERR_MODULE_NOT_FOUND') {
+      console.error('Unsupported model type:', config.model_type)
+      process.exit(1)
+    }
+    throw error
+  }
 
   // Quantization.
   if (config.quantization) {
