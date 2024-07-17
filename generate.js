@@ -27,8 +27,12 @@ async function main(dir, prompt) {
     process.stdout.write(prompt)
 
   // Get BOS and EOS tokens.
-  const bosToken = tokenizer.encode(tokenizer.getToken('bos_token'))[0]
   const eosToken = tokenizer.encode(tokenizer.getToken('eos_token'))[0]
+  let bosToken = eosToken
+  try {
+    // Some models do not have a BOS token, they use EOS instead.
+    bosToken = tokenizer.encode(tokenizer.getToken('bos_token'))[0]
+  } catch {}
 
   // Encode prompt or just use BOS.
   prompt = prompt ? tokenizer.encode(prompt) : [bosToken]

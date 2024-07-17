@@ -3,9 +3,7 @@ import {KVCache, baseModelArgs, createAdditiveCausalMask} from '../llm.js'
 
 function modelArgs(args) {
   args = Object.assign({
-    attentionBias: false,
-    mlpBias: false,
-    ropeTheta: 10000,
+    ropeTheta: 1000000,
     ropeTraditional: false,
     tieWordEmbeddings: true,
   }, baseModelArgs(args))
@@ -16,7 +14,7 @@ function modelArgs(args) {
     const requiredKeys = [ 'factor', 'type' ]
     if (!Object.keys(args.ropeScaling).every(key => requiredKeys.includes(key)))
       throw Error(`rope_scaling must contain keys ${requiredKeys}`)
-    if (this.ropeScaling.type != 'linear')
+    if (args.ropeScaling.type != 'linear')
       throw Error("rope_scaling 'type' currently only supports 'linear'")
   }
   return args
@@ -25,6 +23,7 @@ function modelArgs(args) {
 class Attention extends nn.Module {
   constructor(args) {
     super()
+
     const dim = args.hiddenSize
     this.nHeads = args.numAttentionHeads
     this.nKVHeads = args.numKeyValueHeads
@@ -32,10 +31,10 @@ class Attention extends nn.Module {
     const headDim = Math.floor(args.hiddenSize / this.nHeads)
     this.scale = headDim ** -0.5
 
-    this.qProj = new nn.Linear(dim, this.nHeads * headDim, args.attentionBias)
-    this.kProj = new nn.Linear(dim, this.nKVHeads * headDim, args.attentionBias)
-    this.vProj = new nn.Linear(dim, this.nKVHeads * headDim, args.attentionBias)
-    this.oProj = new nn.Linear(this.nHeads * headDim, dim, args.attentionBias)
+    this.qProj = new nn.Linear(dim, this.nHeads * headDim, true)
+    this.kProj = new nn.Linear(dim, this.nKVHeads * headDim, true)
+    this.vProj = new nn.Linear(dim, this.nKVHeads * headDim, true)
+    this.oProj = new nn.Linear(this.nHeads * headDim, dim, false)
 
     const ropeScale = args.ropeScaling?.type == 'linear' ? 1 / args.ropeScaling.factor
                                                          : 1
@@ -70,16 +69,11 @@ class Attention extends nn.Module {
 }
 
 class MLP extends nn.Module {
-  constructor(args) {
+  constructor(dim, hiddenDim) {
     super()
-
-    const dim = args.hiddenSize
-    const hiddenDim = args.intermediateSize
-    const mlpBias = args.mlpBias
-
-    this.gateProj = new nn.Linear(dim, hiddenDim, mlpBias)
-    this.downProj = new nn.Linear(hiddenDim, dim, mlpBias)
-    this.upProj = new nn.Linear(dim, hiddenDim, mlpBias)
+    this.gateProj = new nn.Linear(dim, hiddenDim, false)
+    this.downProj = new nn.Linear(hiddenDim, dim, false)
+    this.upProj = new nn.Linear(dim, hiddenDim, false)
   }
 
   forward(x) {
@@ -94,7 +88,7 @@ class TransformerBlock extends nn.Module {
     this.numAttentionHeads = args.numAttentionHeads
     this.hiddenSize = args.hiddenSize
     this.selfAttn = new Attention(args)
-    this.mlp = new MLP(args)
+    this.mlp = new MLP(args.hiddenSize, args.intermediateSize)
     this.inputLayernorm = new nn.RMSNorm(args.hiddenSize, args.rmsNormEps)
     this.postAttentionLayernorm = new nn.RMSNorm(args.hiddenSize, args.rmsNormEps)
   }
@@ -102,11 +96,12 @@ class TransformerBlock extends nn.Module {
   forward(x, mask, cache) {
     const r = this.selfAttn.forward(this.inputLayernorm.forward(x), mask, cache)
     const h = mx.add(x, r)
-    return mx.add(h, this.mlp.forward(this.postAttentionLayernorm.forward(h)))
+    const r2 = this.mlp.forward(this.postAttentionLayernorm.forward(h))
+    return mx.add(h, r2)
   }
 }
 
-class LlamaModel extends nn.Module {
+class Qwen2Model extends nn.Module {
   constructor(args) {
     super()
     this.vocabSize = args.vocabSize
@@ -123,7 +118,7 @@ class LlamaModel extends nn.Module {
 
     let mask
     if (h.shape[1] > 1) {
-      mask = createAdditiveCausalMask(h.shape[1], cache ? cache[0].offset : 0)
+      mask = nn.MultiHeadAttention.createAdditiveCausalMask(h.shape[1])
       mask = mask.astype(h.dtype)
     }
 
@@ -143,7 +138,7 @@ export class Model extends nn.Module {
 
     this.args = args
     this.modelType = args.modelType
-    this.model = new LlamaModel(args)
+    this.model = new Qwen2Model(args)
     if (!args.tieWordEmbeddings)
       this.lmHead = new nn.Linear(args.hiddenSize, args.vocabSize, false)
   }
