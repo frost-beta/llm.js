@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import {StringDecoder} from 'node:string_decoder'
 import {core as mx} from '@frost-beta/mlx'
 import {loadTokenizer, loadModel, step} from './llm.js'
 
@@ -42,10 +43,11 @@ async function main(dir, prompt) {
     prompt = prompt.slice(0, -1)
 
   // Generation.
+  const decoder = new StringDecoder('utf8')
   let count = 0
   for await (const [token, prob] of step(prompt, model, eosToken, 0.8)) {
-    const char = tokenizer.decode([token])
-    process.stdout.write(char)
+    const bytes = Buffer.from(tokenizer.decode([token]))
+    process.stdout.write(decoder.write(bytes))
     if (++count > maxTokens)
       break
   }
