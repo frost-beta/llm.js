@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import readline from 'node:readline/promises';
-import {StringDecoder} from 'node:string_decoder'
 import {core as mx} from '@frost-beta/mlx'
 import {loadTokenizer, loadModel, step} from './llm.js'
 
@@ -51,13 +50,17 @@ async function talk(tokenizer, model, messages) {
   const eosToken = tokenizer.encode(tokenizer.getToken('eos_token'))[0]
 
   // Predict next tokens.
-  const decoder = new StringDecoder('utf8')
+  let tokens = []
   let text = ''
   for await (const [token, prob] of step(prompt, model, eosToken, 0.8)) {
-    const bytes = Buffer.from(tokenizer.decode([token]))
-    const char = decoder.write(bytes)
+    tokens.push(token)
+    const char = tokenizer.decode(tokens)
+    // The token may represent an incomplete unicode char.
+    if (char.endsWith('\u{FFFD}'))
+      continue
     text += char
     process.stdout.write(char)
+    tokens = []
   }
   process.stdout.write('\n')
 

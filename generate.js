@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 
-import {StringDecoder} from 'node:string_decoder'
 import {core as mx} from '@frost-beta/mlx'
 import {loadTokenizer, loadModel, step} from './llm.js'
 
-let maxTokens = 1024
+let maxTokens = 512
 const argv = process.argv.slice(2).filter((arg) => {
   if (arg.startsWith('--max-tokens=')) {
     maxTokens = parseInt(arg.substr(arg.indexOf('=') + 1))
@@ -14,7 +13,7 @@ const argv = process.argv.slice(2).filter((arg) => {
 })
 
 if (argv.length < 1) {
-  console.error('Usage: llm-generate /path/to/weights/dir [--max-tokens=1024] [prompt]')
+  console.error('Usage: llm-generate /path/to/weights/dir [--max-tokens=512] [prompt]')
   process.exit(0)
 }
 
@@ -43,13 +42,18 @@ async function main(dir, prompt) {
     prompt = prompt.slice(0, -1)
 
   // Generation.
-  const decoder = new StringDecoder('utf8')
+  let tokens = []
   let count = 0
   for await (const [token, prob] of step(prompt, model, eosToken, 0.8)) {
-    const bytes = Buffer.from(tokenizer.decode([token]))
-    process.stdout.write(decoder.write(bytes))
     if (++count > maxTokens)
       break
+    tokens.push(token)
+    const char = tokenizer.decode(tokens)
+    // The token may represent an incomplete unicode char.
+    if (char.endsWith('\u{FFFD}'))
+      continue
+    process.stdout.write(char)
+    tokens = []
   }
   process.stdout.write('\n')
 }
