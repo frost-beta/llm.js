@@ -44,7 +44,7 @@ async function main(dir) {
 // Send full messages history to model and get response.
 async function talk(tokenizer, model, messages) {
   // Translate the messages to tokens.
-  const prompt = tokenizer.apply_chat_template(messages)
+  const prompt = tokenizer.apply_chat_template(messages, {add_generation_prompt: true})
 
   // The token marking the end of conversation.
   const eosToken = tokenizer.encode(tokenizer.getToken('eos_token'))[0]
