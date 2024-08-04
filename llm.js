@@ -20,8 +20,9 @@ export class KVCache {
   updateAndFetch(keys, values) {
     const prev = this.offset
     if (!this.keys || (prev + keys.shape[2] > this.keys.shape[2])) {
+      const B = keys.shape[0]
       const nSteps = Math.floor((this.step + keys.shape[2] - 1) / this.step)
-      const shape = [1, this.nKVHeads, nSteps * this.step, this.headDim]
+      const shape = [B, this.nKVHeads, nSteps * this.step, this.headDim]
       const newK = mx.zeros(shape, keys.dtype)
       const newV = mx.zeros(shape, values.dtype)
       if (this.keys) {
@@ -68,6 +69,17 @@ export function createAdditiveCausalMask(N, offset = 0) {
   const linds = offset ? mx.arange(offset, offset + N) : rinds
   const mask = mx.less(linds.index(mx.Slice(), null), rinds.index(null))
   return mx.multiply(mask, -1e9)
+}
+
+// Create an attention mask.
+export function createAttentionMask(h, cache) {
+  const T = h.shape[1]
+  if (T > 1) {
+    const offset = cache && cache[0] ? cache[0].offset : 0
+    return createAdditiveCausalMask(T, offset).astype(h.dtype)
+  } else {
+    return null
+  }
 }
 
 // Return a tokenizer.

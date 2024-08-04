@@ -1,5 +1,5 @@
 import {core as mx, nn} from '@frost-beta/mlx'
-import {baseModelArgs, createAdditiveCausalMask} from '../gpt2.js'
+import {baseModelArgs, createAttentionMask} from '../llm.js'
 
 function modelArgs(args) {
   args = baseModelArgs(args)
@@ -105,8 +105,7 @@ class GPT2Model extends nn.Module {
     if (hiddenStates.shape[1] > 1) {
       const positionIds = mx.arange(L)
       hiddenStates = mx.add(hiddenStates, this.wpe.forward(positionIds))
-      mask = createAdditiveCausalMask(hiddenStates.shape[1], cache ? cache[0].offset : 0)
-      mask = mask.astype(hiddenStates.dtype)
+      mask = createAttentionMask(hiddenStates, cache)
     }
 
     cache = cache ?? new Array(this.h.length)

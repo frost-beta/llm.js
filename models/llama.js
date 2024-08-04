@@ -1,5 +1,5 @@
 import {core as mx, nn} from '@frost-beta/mlx'
-import {baseModelArgs, createAdditiveCausalMask} from '../llm.js'
+import {baseModelArgs, createAttentionMask} from '../llm.js'
 
 function modelArgs(args) {
   args = Object.assign({
@@ -203,11 +203,7 @@ class LlamaModel extends nn.Module {
   forward(inputs, cache) {
     let h = this.embedTokens.forward(inputs)
 
-    let mask
-    if (h.shape[1] > 1) {
-      mask = createAdditiveCausalMask(h.shape[1], cache ? cache[0].offset : 0)
-      mask = mask.astype(h.dtype)
-    }
+    const mask = createAttentionMask(h, cache);
 
     cache = cache ?? new Array(this.layers.length)
 

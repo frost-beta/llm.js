@@ -1,5 +1,5 @@
 import {core as mx, nn} from '@frost-beta/mlx'
-import {baseModelArgs} from '../llm.js'
+import {baseModelArgs, createAttentionMask} from '../llm.js'
 
 function ModelArgs(args) {
   return Object.assign({
@@ -135,11 +135,7 @@ class GemmaModel extends nn.Module {
     let h = this.embedTokens.forward(inputs)
     h = mx.multiply(h, this.args.hiddenSize ** 0.5)
 
-    let mask
-    if (h.shape[1] > 1) {
-      mask = nn.MultiHeadAttention.createAdditiveCausalMask(h.shape[1])
-      mask = mask.astype(h.dtype)
-    }
+    const mask = createAttentionMask(h, cache);
 
     cache = cache ?? new Array(this.layers.length)
 
