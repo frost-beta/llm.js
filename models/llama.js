@@ -13,13 +13,97 @@ function modelArgs(args) {
     args.numKeyValueHeads = args.numAttentionHeads
   }
   if (args.ropeScaling) {
-    const requiredKeys = [ 'factor', 'type' ]
-    if (!Object.keys(args.ropeScaling).every(key => requiredKeys.includes(key)))
-      throw Error(`rope_scaling must contain keys ${requiredKeys}`)
-    if (this.ropeScaling.type != 'linear')
-      throw Error("rope_scaling 'type' currently only supports 'linear'")
+    if (!args.ropeScaling.factor)
+      throw new Error('rope_scaling must contain "factor"')
+    const ropeType = this.ropeScaling.type || this.ropeScaling.ropeType
+    if (!ropeType)
+      throw new Error('rope_scaling must contain either "type" or "rope_type"')
+    if (!['linear', 'dynamic', 'llama3'].includes(ropeType))
+      throw new Error('rope_scaling "type" currently only supports "linear", "dynamic" or "llama3"')
   }
   return args
+}
+
+class DynamicNTKScalingRoPE extends nn.Module {
+  constructor(dims,
+              maxPositionEmbeddings = 2048,
+              traditional = false,
+              base = 10000,
+              scale = 1.0,
+              ropeType = 'default',
+              ropeScaling = null) {
+    super()
+    this.dims = dims
+    this.maxPositionEmbeddings = maxPositionEmbeddings
+    this.traditional = traditional
+    this.originalBase = base
+    this.scale = scale
+    this.ropeType = ropeType
+    this.ropeScaling = ropeScaling
+    this.base = this.computeBaseFreq()
+  }
+
+  computeBaseFreq() {
+    if (this.ropeType === 'llama3')
+      return this.computeLlama3BaseFreq()
+    return this.originalBase
+  }
+
+  computeLlama3BaseFreq() {
+    const factor = this.ropeScaling.factor
+    const lowFreqFactor = this.ropeScaling.lowFreqFactor ?? 1.0
+    const highFreqFactor = this.ropeScaling.highFreqFactor ?? 4.0
+    const oldContextLen = this.ropeScaling.originalMaxPositionEmbeddings ?? 8192
+
+    const lowFreqWavelen = oldContextLen / lowFreqFactor
+    const highFreqWavelen = oldContextLen / highFreqFactor
+
+    const freqs = mx.power(mx.this.originalBase, mx.divide(mx.arange(0, this.dims, 2), this.dims))
+    const wavelens = mx.multiply(2 * mx.pi, freqs)
+
+    const smooths = mx.divide(mx.subtract(wavelens, highFreqWavelen),
+                              mx.subtract(lowFreqWavelen, highFreqWavelen))
+    let newBaseFreqs = mx.add(mx.multiply(mx.multiply(freqs,
+                                                      mx.subtract(1, smooths)),
+                                          factor),
+                              smooths);
+    newBaseFreqs = mx.where(mx.less(wavelens, highFreqWavelen), freqs, newBaseFreqs)
+    newBaseFreqs = mx.where(ms.greater(wavelens, lowFreqWavelen), mx.multiply(freqs, factor), newBaseFreqs)
+    return mx.mean(newBaseFreqs).item()
+  }
+
+  forward(x, offset = 0) {
+    const seqLen = x.shape[1] + offset
+    let base = this.base
+    if (this.maxPositionEmbeddings && seqLen > this.maxPositionEmbeddings) {
+      base *= ((this.scale * seqLen / this.maxPositionEmbeddings) - (this.scale - 1)) ** (this.dims / (this.dims - 2))
+    }
+    return mx.fast.rope(x, this.dims, this.traditional, base, this.scale, offset)
+  }
+}
+
+function initializeRoPE(args) {
+  const headDim = args.headDim ?? Math.floor(args.hiddenSize / args.numAttentionHeads)
+
+  const ropeScaling = args.ropeScaling
+  let ropeType = 'default'
+  let ropeScale = 1.0
+
+  if (ropeScaling) {
+    ropeType = (ropeScaling.type ?? ropeScaling.ropeType) ?? 'default'
+    if (ropeType === 'linear')
+      ropeScale = 1 / ropeScaling.factor
+    else if (ropeType === 'llama3')
+      ropeScale = 1.0
+  }
+
+  return new DynamicNTKScalingRoPE(headDim,
+                                   args.maxPositionEmbeddings,
+                                   args.ropeTraditional,
+                                   args.ropeTheta,
+                                   ropeScale,
+                                   ropeType,
+                                   ropeScaling)
 }
 
 class Attention extends nn.Module {
@@ -37,9 +121,7 @@ class Attention extends nn.Module {
     this.vProj = new nn.Linear(dim, this.nKVHeads * headDim, args.attentionBias)
     this.oProj = new nn.Linear(this.nHeads * headDim, dim, args.attentionBias)
 
-    const ropeScale = args.ropeScaling?.type == 'linear' ? 1 / args.ropeScaling.factor
-                                                         : 1
-    this.rope = new nn.RoPE(headDim, args.ropeTraditional, args.ropeTheta, ropeScale)
+    this.rope = initializeRoPE(args);
   }
 
   forward(x, mask, cache) {

@@ -53,10 +53,11 @@ export class KVCache {
 
 // Convert snake_case args into camelCase args.
 export function baseModelArgs(args) {
+  const isObject = (obj) => typeof obj === 'object' && !Array.isArray(obj) && obj !== null
   const newArgs = {}
   for (const key in args) {
     const newKey = key.replace(/(\_\w)/g, (s) => s[1].toUpperCase())
-    newArgs[newKey] = args[key]
+    newArgs[newKey] = isObject(args[key]) ? baseModelArgs(args[key]) : args[key]
   }
   return newArgs
 }
@@ -107,7 +108,7 @@ export async function loadModel(dir) {
       return (`${p}.scales` in weights) &&
              ((m instanceof nn.Linear) || (m instanceof nn.Embedding))
     }
-    const {group_size: groupSize, bits} = config.quantization
+    const {groupSize, bits} = config.quantization
     nn.quantize(model, groupSize, bits, predicate)
   }
 

@@ -1,5 +1,5 @@
 import {core as mx, nn} from '@frost-beta/mlx'
-import {KVCache, baseModelArgs, createAdditiveCausalMask} from '../llm.js'
+import {baseModelArgs, createAdditiveCausalMask} from '../llm.js'
 
 function modelArgs(args) {
   args = Object.assign({
