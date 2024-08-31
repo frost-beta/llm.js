@@ -15,7 +15,7 @@ function modelArgs(args) {
   if (args.ropeScaling) {
     if (!args.ropeScaling.factor)
       throw new Error('rope_scaling must contain "factor"')
-    const ropeType = this.ropeScaling.type || this.ropeScaling.ropeType
+    const ropeType = args.ropeScaling.type || args.ropeScaling.ropeType
     if (!ropeType)
       throw new Error('rope_scaling must contain either "type" or "rope_type"')
     if (!['linear', 'dynamic', 'llama3'].includes(ropeType))
@@ -58,7 +58,7 @@ class DynamicNTKScalingRoPE extends nn.Module {
     const lowFreqWavelen = oldContextLen / lowFreqFactor
     const highFreqWavelen = oldContextLen / highFreqFactor
 
-    const freqs = mx.power(mx.this.originalBase, mx.divide(mx.arange(0, this.dims, 2), this.dims))
+    const freqs = mx.power(this.originalBase, mx.divide(mx.arange(0, this.dims, 2), this.dims))
     const wavelens = mx.multiply(2 * mx.pi, freqs)
 
     const smooths = mx.divide(mx.subtract(wavelens, highFreqWavelen),
@@ -68,7 +68,7 @@ class DynamicNTKScalingRoPE extends nn.Module {
                                           factor),
                               smooths);
     newBaseFreqs = mx.where(mx.less(wavelens, highFreqWavelen), freqs, newBaseFreqs)
-    newBaseFreqs = mx.where(ms.greater(wavelens, lowFreqWavelen), mx.multiply(freqs, factor), newBaseFreqs)
+    newBaseFreqs = mx.where(mx.greater(wavelens, lowFreqWavelen), mx.multiply(freqs, factor), newBaseFreqs)
     return mx.mean(newBaseFreqs).item()
   }
 

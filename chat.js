@@ -2,7 +2,7 @@
 
 import readline from 'node:readline/promises';
 import {core as mx} from '@frost-beta/mlx'
-import {loadTokenizer, loadModel, step} from './llm.js'
+import {loadTokenizer, loadModel, getSpecialTokenId, step} from './llm.js'
 
 if (process.argv.length < 3) {
   console.error('Usage: llm-chat /path/to/weights/dir')
@@ -44,10 +44,10 @@ async function main(dir) {
 // Send full messages history to model and get response.
 async function talk(tokenizer, model, messages) {
   // Translate the messages to tokens.
-  const prompt = tokenizer.apply_chat_template(messages, {add_generation_prompt: true})
+  const prompt = tokenizer.apply_chat_template(messages, {add_generation_prompt: true, tools: null})
 
   // The token marking the end of conversation.
-  const eosToken = tokenizer.encode(tokenizer.getToken('eos_token'))[0]
+  const eosToken = getSpecialTokenId(tokenizer, 'eos_token')
 
   // Predict next tokens.
   let tokens = []

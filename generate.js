@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import {core as mx} from '@frost-beta/mlx'
-import {loadTokenizer, loadModel, step} from './llm.js'
+import {loadTokenizer, loadModel, getSpecialTokenId, step} from './llm.js'
 
 let maxTokens = 512
 const argv = process.argv.slice(2).filter((arg) => {
@@ -27,11 +27,11 @@ async function main(dir, prompt) {
     process.stdout.write(prompt)
 
   // Get BOS and EOS tokens.
-  const eosToken = tokenizer.encode(tokenizer.getToken('eos_token'))[0]
+  const eosToken = getSpecialTokenId(tokenizer, 'eos_token');
   let bosToken = eosToken
   try {
     // Some models do not have a BOS token, they use EOS instead.
-    bosToken = tokenizer.encode(tokenizer.getToken('bos_token'))[0]
+    bosToken = getSpecialTokenId(tokenizer, 'bos_token');
   } catch {}
 
   // Encode prompt or just use BOS.

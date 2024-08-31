@@ -130,6 +130,11 @@ export async function loadModel(dir) {
   return model
 }
 
+// Get the token ID from the tokenizer.
+export function getSpecialTokenId(tokenizer, name) {
+  return tokenizer.model.tokens_to_ids.get(tokenizer.getToken(name))
+}
+
 // Generate tokens from prompt.
 export async function* step(promptTokens, model, eosToken, topP = 1, temperature = 1) {
   // Create KV Cache.
