@@ -1,22 +1,90 @@
 # llm.js
 
-Load language models locally with JavaScript, using
-[node-mlx](https://github.com/frost-beta/node-mlx), code modified from
-[mlx-examples](https://github.com/ml-explore/mlx-examples).
+Node.js module providing inference APIs for large language models, with simple
+CLI.
 
-__Quantized models can only run on Macs with Apple Silicon.__
+Powered by [node-mlx](https://github.com/frost-beta/node-mlx), a machine
+learning framework for Node.js.
 
-## Usage
+## Supported platforms
 
-Download weights
-(more can be found at [mlx-community](https://huggingface.co/collections/mlx-community/)):
+GPU support:
+
+* Macs with Apple Silicon
+
+CPU support:
+
+* x64 Macs
+* x64/arm64 Linux
+
+## Supported models
+
+* Llama [3](https://huggingface.co/collections/meta-llama/meta-llama-3-66214712577ca38149ebb2b6) / [3.1](https://huggingface.co/collections/meta-llama/llama-31-669fc079a0c406a149a5738f)
+* Qwen [2](https://huggingface.co/collections/Qwen/qwen2-6659360b33528ced941e557f) / [2.5](https://huggingface.co/collections/Qwen/qwen25-66e81a666513e518adb90d9e)
+
+Note: Models using data types other than `float32` require GPU support.
+
+## APIs
+
+```typescript
+import { core as mx, nn } from '@frost-beta/mlx';
+
+export abstract class BaseModel extends nn.Module {
+    abstract get layers(): nn.Module[];
+    abstract get headDim(): number;
+    abstract get nKVHeads(): number;
+    abstract forward(inputs: mx.array, cache?: KVCache[]): mx.array;
+}
+
+export class KVCache {
+    constructor(headDim: number, nKVHeads: number);
+}
+
+export interface Message {
+    role: 'user' | 'assistant';
+    content: string;
+}
+
+export class Tokenizer {
+    bosToken: number;
+    eosToken: number;
+    constructor(dir: string);
+    encode(text: string): number[];
+    decode(tokens: number[]): string;
+    applyChatTemplate(messages: Message[]): number[];
+}
+
+export async function loadModel(dir: string): Promise<BaseModel>;
+
+export async function* step(promptTokens: number[],
+                            model: BaseModel,
+                            eosToken: number,
+                            topP?: number,
+                            temperature?: number): AsyncGenerator<[number, number], void>;
+
+export function sample(logits: mx.array,
+                       topP?: number,
+                       temperature?: number): [mx.array, mx.array];
+
+export function topPSampling(logits: mx.array,
+                             topP?: number,
+                             temperature?: number): mx.array;
+```
+
+Check [`chat.ts`](https://github.com/frost-beta/llm.js/blob/main/src/chat.ts)
+and [`generate.ts`](https://github.com/frost-beta/llm.js/blob/main/src/generate.ts)
+for examples.
+
+## CLI
+
+First download weights with any tool you like:
 
 ```sh
 npm install -g @frost-beta/huggingface
 huggingface download --to weights mlx-community/Meta-Llama-3-8B-Instruct-8bit
 ```
 
-Start chating:
+Then start chating:
 
 ```sh
 npm install -g @frost-beta/llm
@@ -28,3 +96,8 @@ Or do text generation:
 ```sh
 llm-generate ./weights 'Write a short story'
 ```
+
+
+## License
+
+MIT

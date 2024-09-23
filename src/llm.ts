@@ -10,7 +10,7 @@ export abstract class BaseModel extends nn.Module {
   abstract get headDim(): number;
   abstract get nKVHeads(): number;
 
-  abstract forward(y: mx.array, cache: KVCache[]): mx.array;
+  abstract forward(inputs: mx.array, cache?: KVCache[]): mx.array;
 }
 
 /**
