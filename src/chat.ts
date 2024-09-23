@@ -2,12 +2,7 @@
 
 import readline from 'node:readline/promises';
 import {core as mx} from '@frost-beta/mlx'
-import {BaseModel, loadTokenizerSync, loadModel, getSpecialTokenId, step} from './llm.js'
-
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-}
+import {BaseModel, Message, Tokenizer, loadModel, step} from './llm.js'
 
 if (process.argv.length < 3) {
   console.error('Usage: llm-chat /path/to/weights/dir');
@@ -23,7 +18,7 @@ main(process.argv[2])
 
 async function main(dir: string) {
   // Load tokenizer.
-  const tokenizer = loadTokenizerSync(dir);
+  const tokenizer = new Tokenizer(dir);
 
   // Load model.
   const model = await loadModel(dir);
@@ -47,17 +42,14 @@ async function main(dir: string) {
 }
 
 // Send full messages history to model and get response.
-async function talk(tokenizer: any, model: BaseModel, messages: Message[]) {
+async function talk(tokenizer: Tokenizer, model: BaseModel, messages: Message[]) {
   // Translate the messages to tokens.
-  const prompt = tokenizer.apply_chat_template(messages, {add_generation_prompt: true, tools: null});
-
-  // The token marking the end of conversation.
-  const eosToken = getSpecialTokenId(tokenizer, 'eos_token');
+  const promptTokens = tokenizer.applyChatTemplate(messages);
 
   // Predict next tokens.
   let tokens: number[] = [];
   let text = '';
-  for await (const [ token ] of step(prompt, model, eosToken, 0.8)) {
+  for await (const [ token ] of step(promptTokens, model, tokenizer.eosToken, 0.8)) {
     tokens.push(token);
     const char = tokenizer.decode(tokens);
     // The token may represent an incomplete unicode char.

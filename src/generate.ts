@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import {loadTokenizerSync, loadModel, getSpecialTokenId, step} from './llm.js';
+import {Tokenizer, loadModel, step} from './llm.js';
 
 let maxTokens = 512;
 const argv = process.argv.slice(2).filter((arg) => {
@@ -19,21 +19,14 @@ if (argv.length < 1) {
 main(argv[0], argv[1]);
 
 async function main(dir: string, prompt: string) {
-  const tokenizer = loadTokenizerSync(dir);
+  const tokenizer = new Tokenizer(dir);
   const model = await loadModel(dir);
 
   if (prompt)
     process.stdout.write(prompt);
 
-  // Get BOS and EOS tokens.
-  const eosToken = getSpecialTokenId(tokenizer, 'eos_token');
-  let bosToken = eosToken;
-  try {
-    // Some models do not have a BOS token, they use EOS instead.
-    bosToken = getSpecialTokenId(tokenizer, 'bos_token') ?? bosToken;
-  } catch {}
-
   // Encode prompt or just use BOS.
+  const {bosToken, eosToken} = tokenizer;
   let promptTokens = prompt ? tokenizer.encode(prompt) : [ bosToken ];
   // Some tokenizers append EOS to the encoded text, remove it otherwise the
   // generation might stop there.

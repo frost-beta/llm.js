@@ -64,7 +64,9 @@ export class KVCache {
   }
 }
 
-// Convert snake_case args into camelCase args.
+/**
+ * Convert snake_case args into camelCase args.
+ */
 export function baseModelArgs<T>(args: T): T | Record<string, any> {
   if (Array.isArray(args))
     return args.map(v => baseModelArgs(v));
@@ -78,7 +80,9 @@ export function baseModelArgs<T>(args: T): T | Record<string, any> {
   return newArgs;
 }
 
-// Create an additive causal mask.
+/**
+ * Create an additive causal mask.
+ */
 export function createAdditiveCausalMask(N: number, offset = 0) {
   const rinds = mx.arange(offset + N);
   const linds = offset ? mx.arange(offset, offset + N) : rinds;
@@ -86,7 +90,9 @@ export function createAdditiveCausalMask(N: number, offset = 0) {
   return mx.multiply(mask, -1e9);
 }
 
-// Create an attention mask.
+/**
+ * Create an attention mask.
+ */
 export function createAttentionMask(h: mx.array, cache: KVCache[]) {
   const T = h.shape[1];
   if (T > 1) {
@@ -97,15 +103,54 @@ export function createAttentionMask(h: mx.array, cache: KVCache[]) {
   }
 }
 
-// Return a tokenizer.
-export function loadTokenizerSync(dir: string): any {
-  return TokenizerLoader.fromPreTrained({
-    tokenizerJSON: readJsonSync(`${dir}/tokenizer.json`),
-    tokenizerConfig: readJsonSync(`${dir}/tokenizer_config.json`),
-  });
+/**
+ * A message in chat models.
+ */
+export interface Message {
+  role: 'user' | 'assistant';
+  content: string;
 }
 
-// Return a model.
+/**
+ * Wraps the tokenizer of transformers.js.
+ */
+export class Tokenizer {
+  bosToken: number;
+  eosToken: number;
+  private tokenizer: ReturnType<typeof TokenizerLoader.fromPreTrained>;
+
+  constructor(dir: string) {
+    this.tokenizer = TokenizerLoader.fromPreTrained({
+      tokenizerJSON: readJsonSync(`${dir}/tokenizer.json`),
+      tokenizerConfig: readJsonSync(`${dir}/tokenizer_config.json`),
+    });
+    // Get EOS token.
+    const {tokens_to_ids} = this.tokenizer.model;
+    this.eosToken = tokens_to_ids.get(this.tokenizer.getToken('eos_token'));
+    // Some models do not have a BOS token, they use EOS instead.
+    this.bosToken = tokens_to_ids.get(this.tokenizer.getToken('bos_token')) ?? this.eosToken;
+  }
+
+  encode(text: string) {
+    return this.tokenizer.encode(text);
+  }
+
+  decode(tokens: number[]) {
+    return this.tokenizer.decode(tokens);
+  }
+
+  applyChatTemplate(messages: Message[]): number[] {
+    return this.tokenizer.apply_chat_template(messages, {
+      add_generation_prompt: true,
+      // https://github.com/xenova/transformers.js/issues/879
+      tools: null,
+    } as unknown) as number[];
+  }
+}
+
+/**
+ * Load the model from directory.
+ */
 export async function loadModel(dir: string): Promise<BaseModel> {
   // Read model config and weights.
   const config = readJsonSync(`${dir}/config.json`);
@@ -145,12 +190,9 @@ export async function loadModel(dir: string): Promise<BaseModel> {
   return model;
 }
 
-// Get the token ID from the tokenizer.
-export function getSpecialTokenId(tokenizer: any, name: string) {
-  return tokenizer.model.tokens_to_ids.get(tokenizer.getToken(name));
-}
-
-// Generate tokens from prompt.
+/**
+ * Generate tokens from prompt.
+ */
 export async function* step(promptTokens: number[],
                             model: BaseModel,
                             eosToken: number,
@@ -188,7 +230,9 @@ export async function* step(promptTokens: number[],
   mx.dispose(cache);
 }
 
-// Pick the best token from logits.
+/**
+ * Pick the best token from logits.
+ */
 export function sample(logits: mx.array, topP = 1, temperature = 1): [ mx.array, mx.array ] {
   const softmaxLogits = mx.softmax(logits);
   let token: mx.array;
@@ -205,7 +249,9 @@ export function sample(logits: mx.array, topP = 1, temperature = 1): [ mx.array,
   return [ token, prob ];
 }
 
-// Sampling with top-p.
+/**
+ * Sampling with top-p.
+ */
 export function topPSampling(logits: mx.array, topP = 1, temperature = 1): mx.array {
   const probs = mx.softmax(mx.divide(logits, temperature), -1);
 
@@ -220,6 +266,11 @@ export function topPSampling(logits: mx.array, topP = 1, temperature = 1): mx.ar
 
   const sortedToken = mx.random.categorical(mx.log(topProbs));
   return sortedIndices.squeeze(0).index(sortedToken);
+}
+
+// Get the token ID from the tokenizer.
+function getSpecialTokenId(tokenizer: any, name: string) {
+  return tokenizer.model.tokens_to_ids.get(tokenizer.getToken(name));
 }
 
 // Helper for reading a .json file.
