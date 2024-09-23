@@ -30,7 +30,7 @@ async function main(dir: string, prompt: string) {
   let bosToken = eosToken;
   try {
     // Some models do not have a BOS token, they use EOS instead.
-    bosToken = getSpecialTokenId(tokenizer, 'bos_token');
+    bosToken = getSpecialTokenId(tokenizer, 'bos_token') ?? bosToken;
   } catch {}
 
   // Encode prompt or just use BOS.

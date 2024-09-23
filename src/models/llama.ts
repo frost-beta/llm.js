@@ -53,7 +53,7 @@ function modelArgs(args: any): ModelArgs {
 }
 
 class DynamicNTKScalingRoPE extends nn.Module {
-  private freqs?: mx.array;
+  #freqs?: mx.array;
 
   constructor(public dims: number,
               public maxPositionEmbeddings = 2048,
@@ -91,12 +91,12 @@ class DynamicNTKScalingRoPE extends nn.Module {
                                   mx.add(mx.divide(mx.subtract(1, smoothFactors),
                                                    factor),
                                          smoothFactors));
-    this.freqs = mx.where(isMediumFreq, smoothFreqs, freqs);
+    this.#freqs = mx.where(isMediumFreq, smoothFreqs, freqs);
     this.base = undefined;
   }
 
   forward(x: mx.array, offset = 0) {
-    return mx.fast.rope(x, this.dims, this.traditional, this.base, this.scale, offset, this.freqs);
+    return mx.fast.rope(x, this.dims, this.traditional, this.base, this.scale, offset, this.#freqs);
   }
 }
 

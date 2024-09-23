@@ -108,7 +108,7 @@ export function loadTokenizerSync(dir: string): any {
 // Return a model.
 export async function loadModel(dir: string): Promise<BaseModel> {
   // Read model config and weights.
-  const config = readJsonSync(`${dir}/tokenizer.json`);
+  const config = readJsonSync(`${dir}/config.json`);
   const weights = {};
   for (const filename of readdirSync(dir)) {
     if (filename.endsWith('.safetensors'))
