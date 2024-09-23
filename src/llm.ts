@@ -70,7 +70,7 @@ export class KVCache {
 export function baseModelArgs<T>(args: T): T | Record<string, any> {
   if (Array.isArray(args))
     return args.map(v => baseModelArgs(v));
-  if (typeof args != 'object')
+  if (typeof args != 'object' || args === null)
     return args;
   const newArgs: Record<string, any> = {};
   for (const key in args) {
