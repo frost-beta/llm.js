@@ -16,10 +16,13 @@ jobs:
       - name: Test
         run: |
           yarn
+          yarn prepack
+
           huggingface download mlx-community/Meta-Llama-3-8B-Instruct-4bit
-          echo Hello | node chat.js Meta-Llama-3-8B-Instruct-4bit
+          echo Hello | node dist/chat.js Meta-Llama-3-8B-Instruct-4bit
+
           huggingface download frost-beta/Llama3-33.5M-Japanese
-          node generate.js Llama3-33.5M-Japanese
+          node dist/generate.js Llama3-33.5M-Japanese
 
   publish:
     if: startsWith(github.ref, 'refs/tags/')

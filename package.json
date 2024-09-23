@@ -1,11 +1,14 @@
 {
   "name": "@frost-beta/llm",
   "version": "0.0.1-dev",
-  "main": "llm.js",
-  "type": "module",
+  "main": "dist/llm.js",
+  "types": "dist/llm.d.ts",
   "bin": {
-    "llm-chat": "chat.js",
-    "llm-generate": "generate.js"
+    "llm-chat": "dist/chat.js",
+    "llm-generate": "dist/generate.js"
+  },
+  "scripts": {
+    "prepack": "tsc"
   },
   "author": "zcbenz",
   "license": "MIT",
@@ -16,10 +19,13 @@
   "bugs": {
     "url": "https://github.com/frost-beta/llm.js/issues"
   },
-  "dependencies": {
-    "@frost-beta/mlx": "0.0.17",
-    "@lenml/tokenizers": "1.1.1",
-    "tick-promise": "1.0.0"
+  "devDependencies": {
+    "@types/node": "22.5.4",
+    "tsx": "4.19.1",
+    "typescript": "5.6.2"
   },
-  "packageManager": "yarn@1.22.22"
+  "dependencies": {
+    "@frost-beta/mlx": "0.0.20",
+    "@lenml/tokenizers": "1.1.2"
+  }
 }
