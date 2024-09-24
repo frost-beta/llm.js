@@ -212,10 +212,19 @@ export function createAdditiveCausalMask(N: number, offset = 0) {
 /**
  * Create an attention mask.
  */
-export function createAttentionMask(h: mx.array, cache: BaseKVCache[]) {
+export function createAttentionMask(h: mx.array, cache?: BaseKVCache[]) {
   const T = h.shape[1];
   if (T > 1) {
-    const offset = cache && cache[0] ? cache[0].offset : 0;
+    let offset: number;
+    if (cache && cache[0]) {
+      const c = cache[0];
+      if (c instanceof RotatingKVCache)
+        offset = Math.min(c.maxSize - 1, c.offset);
+      else
+        offset = c.offset;
+    } else {
+      offset = 0;
+    }
     return createAdditiveCausalMask(T, offset).astype(h.dtype);
   } else {
     return null;

@@ -9,11 +9,6 @@ if (process.argv.length < 3) {
   process.exit(0);
 }
 
-// We don't limit the total tokens, and RAM just keeps increasing as context is
-// being accumulated, without limiting cache the RAM will not go down to the
-// normal after generation is finished.
-mx.metal.setCacheLimit(10 * 1024 ** 2);
-
 main(process.argv[2])
 
 async function main(dir: string) {
@@ -65,6 +60,12 @@ async function talk(tokenizer: Tokenizer, model: BaseModel, messages: Message[])
     console.log(`MLX RAM ${(mx.metal.getActiveMemory() / 1024 ** 2).toFixed(1)}M,`,
                 `Cache ${(mx.metal.getCacheMemory() / 1024 ** 2).toFixed(1)}M,`,
                 `JS Objects ${mx.getWrappersCount()}.`);
+  }
+
+  if (mx.metal.isAvailable()) {
+    // After a conversation, we know it will take a while before next input and
+    // it is good chance to just release all the memory cache.
+    mx.metal.clearCache();
   }
   return text;
 }
