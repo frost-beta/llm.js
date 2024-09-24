@@ -18,10 +18,10 @@ jobs:
           yarn
           yarn prepack
 
-          huggingface download mlx-community/Meta-Llama-3-8B-Instruct-4bit
+          huggingface download --silent mlx-community/Meta-Llama-3-8B-Instruct-4bit
           echo Hello | yarn tsx src/chat.ts Meta-Llama-3-8B-Instruct-4bit
 
-          huggingface download Qwen/Qwen2-0.5B
+          huggingface download --silent Qwen/Qwen2-0.5B
           yarn tsx src/generate.ts Qwen2-0.5B
 
   publish:
