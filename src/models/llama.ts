@@ -1,5 +1,5 @@
 import {core as mx, nn} from '@frost-beta/mlx';
-import {BaseModel, KVCache, baseModelArgs, createAttentionMask} from '../llm.js';
+import {BaseModel, BaseKVCache, baseModelArgs, createAttentionMask} from '../llm.js';
 
 interface RopeScaling {
   type?: string;
@@ -151,7 +151,7 @@ class Attention extends nn.Module {
     this.rope = initializeRoPE(args);
   }
 
-  forward(x: mx.array, mask: mx.array, cache: KVCache) {
+  forward(x: mx.array, mask: mx.array, cache: BaseKVCache) {
     const [ B, L, D ] = x.shape;
 
     let queries = this.qProj.forward(x);
@@ -215,7 +215,7 @@ class TransformerBlock extends nn.Module {
     this.postAttentionLayernorm = new nn.RMSNorm(args.hiddenSize, args.rmsNormEps);
   }
 
-  forward(x: mx.array, mask: mx.array, cache?: KVCache) {
+  forward(x: mx.array, mask: mx.array, cache?: BaseKVCache) {
     const r = this.selfAttn.forward(this.inputLayernorm.forward(x), mask, cache);
     const h = mx.add(x, r);
     const r2 = this.mlp.forward(this.postAttentionLayernorm.forward(h));
@@ -237,7 +237,7 @@ class LlamaModel extends nn.Module {
     this.norm = new nn.RMSNorm(args.hiddenSize, args.rmsNormEps);
   }
 
-  forward(inputs: mx.array, cache?: KVCache[]) {
+  forward(inputs: mx.array, cache?: BaseKVCache[]) {
     let h = this.embedTokens.forward(inputs);
 
     const mask = createAttentionMask(h, cache);
@@ -249,7 +249,7 @@ class LlamaModel extends nn.Module {
   }
 }
 
-export class Model extends nn.Module {
+export class Model extends BaseModel {
   args: ModelArgs;
   model: LlamaModel;
   lmHead: nn.Linear;
@@ -264,7 +264,7 @@ export class Model extends nn.Module {
       this.lmHead = new nn.Linear(args.hiddenSize, args.vocabSize, false);
   }
 
-  forward(inputs: mx.array, cache?: KVCache[]) {
+  forward(inputs: mx.array, cache?: BaseKVCache[]) {
     const out = this.model.forward(inputs, cache);
     if (this.args.tieWordEmbeddings)
       return this.model.embedTokens.asLinear(out);

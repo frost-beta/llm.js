@@ -10,7 +10,23 @@ export abstract class BaseModel extends nn.Module {
   abstract get headDim(): number;
   abstract get nKVHeads(): number;
 
-  abstract forward(inputs: mx.array, cache?: KVCache[]): mx.array;
+  abstract forward(inputs: mx.array, cache?: BaseKVCache[]): mx.array;
+}
+
+/**
+ * The base class of KV cache.
+ */
+export abstract class BaseKVCache {
+  keys?: mx.array;
+  values?: mx.array;
+  offset = 0;
+  step = 256;
+
+  abstract updateAndFetch(keys: mx.array, values: mx.array): [ mx.array, mx.array ];
+
+  get state() {
+    return [ this.keys, this.values ];
+  }
 }
 
 /**
@@ -19,17 +35,13 @@ export abstract class BaseModel extends nn.Module {
  *
  * See also https://github.com/ml-explore/mlx-examples/issues/724.
  */
-export class KVCache {
-  keys?: mx.array;
-  values?: mx.array;
-  offset = 0;
-  step = 256;
-
+export class KVCache extends BaseKVCache {
   constructor(public headDim: number,
               public nKVHeads: number) {
+    super();
   }
 
-  updateAndFetch(keys: mx.array, values: mx.array) {
+  override updateAndFetch(keys: mx.array, values: mx.array): [ mx.array, mx.array ] {
     const prev = this.offset;
     if (!this.keys || (prev + keys.shape[2] > this.keys.shape[2])) {
       const B = keys.shape[0];
@@ -60,7 +72,111 @@ export class KVCache {
     this.values.indexPut_(insert, values);
 
     const get: mx.ArrayIndex[] = [ '...', mx.Slice(null, this.offset), mx.Slice() ];
-    return [this.keys.index(...get), this.values.index(...get)];
+    return [ this.keys.index(...get), this.values.index(...get) ];
+  }
+}
+
+/**
+ * KV cache using rotating buffer, enabling infinite generations.
+ *
+ * See also https://github.com/ml-explore/mlx-examples/pull/931.
+ */
+export class RotatingKVCache extends BaseKVCache {
+  kHeadDim: number;
+  vHeadDim: number;
+  #idx = 0;
+
+  constructor(headDim: number,
+              public nKVHeads: number,
+              public maxSize = 1024,
+              public keep = 4) {
+    super();
+    this.kHeadDim = this.vHeadDim = headDim;
+  }
+
+  override updateAndFetch(keys: mx.array, values: mx.array): [ mx.array, mx.array ] {
+    const prev = this.offset;
+    const [ B, , S ] = keys.shape;
+
+    // Prefill mode.
+    if (S > 1) {
+      if (!this.keys) {
+        this.keys = keys;
+        this.values = values;
+      } else {
+        // The largest size is this.maxSize + S - 1 to ensure every token gets
+        // at least this.maxSize context.
+        const trimSize = this.keys.shape[2] - this.maxSize + 1;
+        const old = [ this.keys, this.values ];
+        this.keys = this.trim(trimSize, this.keys, keys);
+        this.values = this.trim(trimSize, this.values, values);
+        mx.dispose(old);
+      }
+      this.offset += S;
+      this.#idx = this.keys.shape[2];
+      return [ this.keys, this.values ];
+    }
+
+    // Generation mode.
+
+    // May not have hit the max size yet, so potentiall keep growing the cache.
+    if (!this.keys || (prev >= this.keys.shape[2] && this.keys.shape[2] < this.maxSize)) {
+      const newSize = Math.min(this.step, this.maxSize - prev);
+      const kShape = [ B, this.nKVHeads, newSize, this.kHeadDim ];
+      const vShape = [ B, this.nKVHeads, newSize, this.vHeadDim ];
+      const newK = mx.zeros(kShape, keys.dtype);
+      const newV = mx.zeros(vShape, values.dtype);
+      if (this.keys) {
+        const old = [ this.keys, this.values ];
+        this.keys = mx.concatenate([ this.keys, newK ], 2);
+        this.values = mx.concatenate([ this.keys, newV ], 2);
+        mx.dispose(old);
+      } else {
+        this.keys = newK;
+        this.values = newV;
+      }
+      this.#idx = prev;
+    }
+
+    // Trim if needed.
+    const trimSize = this.keys.shape[2] - this.maxSize;
+    if (trimSize > 0) {
+      const old = [ this.keys, this.values ];
+      this.keys = this.trim(trimSize, this.keys);
+      this.values = this.trim(trimSize, this.values);
+      mx.dispose(old);
+      this.#idx = prev;
+    }
+
+    // Rotate.
+    if (this.#idx == this.maxSize) {
+      this.#idx = this.keep;
+    }
+
+    // Assign.
+    const insert: mx.ArrayIndex[] = [ '...', mx.Slice(this.#idx, this.#idx + 1), mx.Slice() ];
+    this.keys.indexPut_(insert, keys);
+    this.values.indexPut_(insert, values);
+    this.offset += 1;
+    this.#idx += 1;
+
+    // If the buffer is not full, slice off the end.
+    if (this.offset < this.maxSize) {
+      const get: mx.ArrayIndex[] = [ '...', mx.Slice(null, this.offset), mx.Slice() ];
+      return [ this.keys.index(...get), this.values.index(...get) ];
+    }
+    return [ this.keys, this.values ];
+  }
+
+  private trim(trimSize: number, v: mx.array, append?: mx.array) {
+    let toCat: mx.array[];
+    if (trimSize > 0) {
+      toCat = [ v.index('...', mx.Slice(0, this.keep), mx.Slice()),
+                v.index('...', mx.Slice(trimSize + this.keep), mx.Slice()) ];
+    } else {
+      toCat = [ v ];
+    }
+    return mx.concatenate(toCat, 2);
   }
 }
 
@@ -93,7 +209,7 @@ export function createAdditiveCausalMask(N: number, offset = 0) {
 /**
  * Create an attention mask.
  */
-export function createAttentionMask(h: mx.array, cache: KVCache[]) {
+export function createAttentionMask(h: mx.array, cache: BaseKVCache[]) {
   const T = h.shape[1];
   if (T > 1) {
     const offset = cache && cache[0] ? cache[0].offset : 0;
@@ -199,12 +315,12 @@ export async function* step(promptTokens: number[],
                             topP = 1,
                             temperature = 1): AsyncGenerator<[ number, number ], void> {
   // Create KV Cache.
-  const cache: KVCache[] = [];
+  const cache: RotatingKVCache[] = [];
   for (let i = 0; i < model.layers.length; ++i)
-    cache[i] = new KVCache(model.headDim, model.nKVHeads);
+    cache[i] = new RotatingKVCache(model.headDim, model.nKVHeads);
 
   // Feed the tokens to model and get predictions.
-  const forward = (y: number[]): [ number, number, KVCache[] ] => {
+  const forward = (y: number[]): [ number, number, RotatingKVCache[] ] => {
     let logits = model.forward(mx.array([ y ], mx.int32), cache);
     logits = logits.index(mx.Slice(), -1, mx.Slice());
     const [ token, prob ] = sample(logits, topP, temperature);
@@ -212,7 +328,19 @@ export async function* step(promptTokens: number[],
     return [ token.item() as number, prob.item() as number, cache ];
   }
 
+  // Prefill the prompt tokens.
+  // See also https://github.com/ml-explore/mlx-examples/pull/931
+  const prefillStepSize = 512;
   let tokens = promptTokens;
+  while (tokens.length > prefillStepSize) {
+    mx.tidy(() => {
+      model.forward(mx.array(tokens.slice(0, prefillStepSize), mx.int32).index(mx.newaxis), cache);
+      mx.eval(cache.map(c => c.state));
+      tokens = tokens.slice(prefillStepSize);
+      return cache;
+    });
+  }
+
   while (true) {
     // Forward the tokens to model, and make sure intermediate tensors are freed.
     const [ token, prob ] = mx.tidy(() => forward(tokens));
@@ -266,11 +394,6 @@ export function topPSampling(logits: mx.array, topP = 1, temperature = 1): mx.ar
 
   const sortedToken = mx.random.categorical(mx.log(topProbs));
   return sortedIndices.squeeze(0).index(sortedToken);
-}
-
-// Get the token ID from the tokenizer.
-function getSpecialTokenId(tokenizer: any, name: string) {
-  return tokenizer.model.tokens_to_ids.get(tokenizer.getToken(name));
 }
 
 // Helper for reading a .json file.

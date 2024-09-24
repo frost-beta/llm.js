@@ -36,8 +36,21 @@ export abstract class BaseModel extends nn.Module {
     abstract forward(inputs: mx.array, cache?: KVCache[]): mx.array;
 }
 
-export class KVCache {
+export abstract class BaseKVCache {
+    keys?: mx.array;
+    values?: mx.array;
+    offset: number;
+    step: number;
+    abstract updateAndFetch(keys: mx.array, values: mx.array): [mx.array, mx.array];
+    get state(): mx.array[];
+}
+
+export class KVCache extends BaseKVCache {
     constructor(headDim: number, nKVHeads: number);
+}
+
+export class RotatingKVCache extends BaseKVCache {
+    constructor(headDim: number, nKVHeads: number, maxSize = 1024, keep = 4);
 }
 
 export interface Message {
