@@ -129,7 +129,7 @@ export class RotatingKVCache extends BaseKVCache {
       if (this.keys) {
         const old = [ this.keys, this.values ];
         this.keys = mx.concatenate([ this.keys, newK ], 2);
-        this.values = mx.concatenate([ this.keys, newV ], 2);
+        this.values = mx.concatenate([ this.values, newV ], 2);
         mx.dispose(old);
       } else {
         this.keys = newK;
@@ -145,7 +145,7 @@ export class RotatingKVCache extends BaseKVCache {
       this.keys = this.trim(trimSize, this.keys);
       this.values = this.trim(trimSize, this.values);
       mx.dispose(old);
-      this.#idx = prev;
+      this.#idx = this.maxSize;
     }
 
     // Rotate.
@@ -175,6 +175,9 @@ export class RotatingKVCache extends BaseKVCache {
                 v.index('...', mx.Slice(trimSize + this.keep), mx.Slice()) ];
     } else {
       toCat = [ v ];
+    }
+    if (append) {
+      toCat.push(append);
     }
     return mx.concatenate(toCat, 2);
   }
@@ -315,12 +318,12 @@ export async function* step(promptTokens: number[],
                             topP = 1,
                             temperature = 1): AsyncGenerator<[ number, number ], void> {
   // Create KV Cache.
-  const cache: RotatingKVCache[] = [];
+  const cache: BaseKVCache[] = [];
   for (let i = 0; i < model.layers.length; ++i)
     cache[i] = new RotatingKVCache(model.headDim, model.nKVHeads);
 
   // Feed the tokens to model and get predictions.
-  const forward = (y: number[]): [ number, number, RotatingKVCache[] ] => {
+  const forward = (y: number[]): [ number, number, BaseKVCache[] ] => {
     let logits = model.forward(mx.array([ y ], mx.int32), cache);
     logits = logits.index(mx.Slice(), -1, mx.Slice());
     const [ token, prob ] = sample(logits, topP, temperature);
