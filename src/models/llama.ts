@@ -1,7 +1,7 @@
 import {core as mx, nn} from '@frost-beta/mlx';
 import {BaseModel, BaseKVCache, baseModelArgs, createAttentionMask} from '../llm.js';
 
-interface RopeScaling {
+export interface RopeScaling {
   type?: string;
   ropeType?: string;
   factor?: number;
@@ -10,7 +10,7 @@ interface RopeScaling {
   originalMaxPositionEmbeddings?: number;
 }
 
-interface ModelArgs {
+export interface ModelArgs {
   modelType: 'llama';
   attentionBias: boolean;
   headDim?: number;
@@ -29,7 +29,7 @@ interface ModelArgs {
   vocabSize: number;
 };
 
-function modelArgs(args: any): ModelArgs {
+export function modelArgs(args: any): ModelArgs {
   args = Object.assign({
     attentionBias: false,
     mlpBias: false,
@@ -115,13 +115,17 @@ function initializeRoPE(args: ModelArgs) {
       ropeScale = 1;
   }
 
-  return new DynamicNTKScalingRoPE(headDim,
-                                   args.maxPositionEmbeddings,
-                                   args.ropeTraditional,
-                                   args.ropeTheta,
-                                   ropeScale,
-                                   ropeType,
-                                   ropeScaling);
+  if (ropeType == 'llama3') {
+    return new DynamicNTKScalingRoPE(headDim,
+                                     args.maxPositionEmbeddings,
+                                     args.ropeTraditional,
+                                     args.ropeTheta,
+                                     ropeScale,
+                                     ropeType,
+                                     ropeScaling);
+  } else {
+    return new nn.RoPE(headDim, args.ropeTraditional, args.ropeTheta, ropeScale);
+  }
 }
 
 class Attention extends nn.Module {
@@ -132,10 +136,10 @@ class Attention extends nn.Module {
   kProj: nn.Linear;
   vProj: nn.Linear;
   oProj: nn.Linear;
-  rope: DynamicNTKScalingRoPE;
+  rope: nn.RoPE | DynamicNTKScalingRoPE;
 
   constructor(args: ModelArgs) {
-    super()
+    super();
     const dim = args.hiddenSize;
     this.nHeads = args.numAttentionHeads;
     this.nKVHeads = args.numKeyValueHeads;
@@ -208,7 +212,7 @@ class TransformerBlock extends nn.Module {
   postAttentionLayernorm: nn.RMSNorm;
 
   constructor(args: ModelArgs) {
-    super()
+    super();
     this.selfAttn = new Attention(args);
     this.mlp = new MLP(args);
     this.inputLayernorm = new nn.RMSNorm(args.hiddenSize, args.rmsNormEps);
@@ -237,8 +241,8 @@ class LlamaModel extends nn.Module {
     this.norm = new nn.RMSNorm(args.hiddenSize, args.rmsNormEps);
   }
 
-  forward(inputs: mx.array, cache?: BaseKVCache[]) {
-    let h = this.embedTokens.forward(inputs);
+  forward(inputs: mx.array, cache?: BaseKVCache[], inputEmbeds?: mx.array) {
+    let h = inputEmbeds ?? this.embedTokens.forward(inputs);
 
     const mask = createAttentionMask(h, cache);
 
@@ -264,8 +268,8 @@ export class Model extends BaseModel {
       this.lmHead = new nn.Linear(args.hiddenSize, args.vocabSize, false);
   }
 
-  forward(inputs: mx.array, cache?: BaseKVCache[]) {
-    const out = this.model.forward(inputs, cache);
+  forward(inputs: mx.array, cache?: BaseKVCache[], inputEmbeds?: mx.array) {
+    const out = this.model.forward(inputs, cache, inputEmbeds);
     if (this.args.tieWordEmbeddings)
       return this.model.embedTokens.asLinear(out);
     else
