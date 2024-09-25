@@ -112,9 +112,8 @@ export class Model extends BaseModel {
     return this.languageModel.forward(inputIds, cache, inputEmbddings);
   }
 
-  sanitize(weights: [ string, mx.array ][]): [ string, mx.array ][] {
-    const sanitizedWeights: [ string, mx.array ][] = [];
-    for (const [ key, value ] of weights) {
+  sanitize(weights: Record<string, mx.array>) {
+    for (const key in weights) {
       // Remove unused position_ids.
       if (key.includes('position_ids'))
         continue;
@@ -123,11 +122,8 @@ export class Model extends BaseModel {
       // MLX Conv2d expects the weight tensor to be of shape:
       // [out_channels, kH, KW, in_channels]
       if (key.endsWith('patch_embedding.weight'))
-        sanitizedWeights.push([ key, value.transpose(0, 2, 3, 1) ]);
-      else
-        sanitizedWeights.push([ key, value ]);
+        weights[key] = weights[key].transpose(0, 2, 3, 1);
     }
-    return sanitizedWeights;
   }
 
   get layers() {

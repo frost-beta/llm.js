@@ -12,8 +12,7 @@ export abstract class BaseModel extends nn.Module {
     return this.forward(inputIds, cache);
   }
 
-  sanitize(weights: [ string, mx.array ][]): [ string, mx.array ][] {
-    return weights;
+  sanitize(weights: Record<string, mx.array>) {
   }
 
   abstract get layers(): nn.Module[];
@@ -307,12 +306,12 @@ export async function loadModel(dir: string): Promise<BaseModel> {
   }
 
   // Read and sanitize weights.
-  let weights: [ string, mx.array ][] = [];
+  const weights: Record<string, mx.array> = {};
   for (const filename of readdirSync(dir)) {
     if (filename.endsWith('.safetensors'))
-      weights.push(...Object.entries(mx.load(`${dir}/${filename}`)));
+      Object.assign(weights, mx.load(`${dir}/${filename}`));
   }
-  weights = model.sanitize(weights);
+  model.sanitize(weights);
 
   // Quantization.
   if (config.quantization) {
@@ -326,7 +325,7 @@ export async function loadModel(dir: string): Promise<BaseModel> {
   }
 
   // Load weights.
-  model.loadWeights(weights);
+  model.loadWeights(Object.entries(weights));
   mx.eval(model.parameters());
   return model;
 }
