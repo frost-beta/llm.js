@@ -260,6 +260,10 @@ export class Tokenizer {
       tokenizerJSON: readJsonSync(`${dir}/tokenizer.json`),
       tokenizerConfig: readJsonSync(`${dir}/tokenizer_config.json`),
     });
+    // Do not strip the heading whitespace as it breaks streaming.
+    const {decoders} = this.tokenizer.decoder as any;
+    if (decoders?.at(-1)?.config?.type == 'Strip')
+      decoders.pop();
     // Get EOS token.
     const {tokens_to_ids} = this.tokenizer.model;
     this.eosToken = tokens_to_ids.get(this.tokenizer.getToken('eos_token'));
