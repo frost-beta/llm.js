@@ -15,21 +15,6 @@ export interface VisionConfig {
   layerNormEps: number;
 }
 
-export function visionConfig(json: any): VisionConfig {
-  return Object.assign({
-    numHiddenLayers: 24,
-    hiddenSize: 1024,
-    intermediateSize: 4096,
-    numAttentionHeads: 16,
-    imageSize: 335,
-    patchSize: 14,
-    projectionDim: 768,
-    vocabSize: 3200,
-    numChannels: 3,
-    layerNormEps: 1e-5,
-  }, baseModelArgs(json));
-}
-
 class Attention extends nn.Module {
   numHeads: number;
   qProj: nn.Linear;
@@ -175,21 +160,21 @@ class VisionEmbeddings extends nn.Module {
 
 class ClipVisionModel extends nn.Module {
   embeddings: VisionEmbeddings;
-  preLayernorm: nn.LayerNorm;
+  preLayrnorm: nn.LayerNorm;
   encoder: Encoder;
   postLayernorm: nn.LayerNorm;
 
   constructor(config: VisionConfig) {
     super();
     this.embeddings = new VisionEmbeddings(config);
-    this.preLayernorm = new nn.LayerNorm(config.hiddenSize);
+    this.preLayrnorm = new nn.LayerNorm(config.hiddenSize);
     this.encoder = new Encoder(config);
     this.postLayernorm = new nn.LayerNorm(config.hiddenSize);
   }
 
   forward(x: mx.array, outputHiddenStates = false): [ mx.array, mx.array, mx.array[] ] {
     x = this.embeddings.forward(x);
-    x = this.preLayernorm.forward(x);
+    x = this.preLayrnorm.forward(x);
 
     let encoderStates = outputHiddenStates ? [ x ] : null;
 
@@ -209,7 +194,6 @@ export class VisionModel extends nn.Module {
 
   constructor(config: VisionConfig) {
     super();
-    config = visionConfig(config);
     if (config.modelType != 'clip_vision_model')
       throw new Error(`Unsupported vision model type: ${config.modelType}`);
     this.visionModel = new ClipVisionModel(config);

@@ -29,14 +29,14 @@ export interface ModelArgs {
   vocabSize: number;
 };
 
-export function modelArgs(args: any): ModelArgs {
-  args = Object.assign({
+export function modelArgs(json: any): ModelArgs {
+  const args = Object.assign({
     attentionBias: false,
     mlpBias: false,
     ropeTheta: 10000,
     ropeTraditional: false,
     tieWordEmbeddings: true,
-  }, baseModelArgs(args));
+  }, baseModelArgs(json));
   if (!args.numKeyValueHeads) {
     args.numKeyValueHeads = args.numAttentionHeads;
   }

@@ -6,11 +6,19 @@ import {core as mx, nn} from '@frost-beta/mlx';
  * The base class of LLM models.
  */
 export abstract class BaseModel extends nn.Module {
+  abstract forward(inputs: mx.array, cache?: BaseKVCache[]): mx.array;
+
+  forwardWithPixels(inputIds: mx.array, pixelValues: mx.array, cache?: BaseKVCache[]): mx.array {
+    return this.forward(inputIds, cache);
+  }
+
+  sanitize(weights: [ string, mx.array ][]): [ string, mx.array ][] {
+    return weights;
+  }
+
   abstract get layers(): nn.Module[];
   abstract get headDim(): number;
   abstract get nKVHeads(): number;
-
-  abstract forward(inputs: mx.array, cache?: BaseKVCache[]): mx.array;
 }
 
 /**
@@ -186,9 +194,9 @@ export class RotatingKVCache extends BaseKVCache {
 /**
  * Convert snake_case args into camelCase args.
  */
-export function baseModelArgs<T>(args: T): T | Record<string, any> {
+export function baseModelArgs<T>(args: T): T {
   if (Array.isArray(args))
-    return args.map(v => baseModelArgs(v));
+    return args.map(v => baseModelArgs(v)) as T;
   if (typeof args != 'object' || args === null)
     return args;
   const newArgs: Record<string, any> = {};
@@ -196,7 +204,7 @@ export function baseModelArgs<T>(args: T): T | Record<string, any> {
     const newKey = key.replace(/(\_\w)/g, (s) => s[1].toUpperCase())
     newArgs[newKey] = baseModelArgs(args[key]);
   }
-  return newArgs;
+  return newArgs as T;
 }
 
 /**
@@ -280,15 +288,8 @@ export class Tokenizer {
  * Load the model from directory.
  */
 export async function loadModel(dir: string): Promise<BaseModel> {
-  // Read model config and weights.
-  const config = readJsonSync(`${dir}/config.json`);
-  const weights = {};
-  for (const filename of readdirSync(dir)) {
-    if (filename.endsWith('.safetensors'))
-      Object.assign(weights, mx.load(`${dir}/${filename}`));
-  }
-
   // Create llama3 model.
+  const config = readJsonSync(`${dir}/config.json`);
   let model: BaseModel;
   try {
     const {Model} = await import(`./models/${config.model_type}.js`);
@@ -312,8 +313,16 @@ export async function loadModel(dir: string): Promise<BaseModel> {
     nn.quantize(model, groupSize, bits, predicate);
   }
 
+  // Read and sanitize weights.
+  let weights: [ string, mx.array ][] = [];
+  for (const filename of readdirSync(dir)) {
+    if (filename.endsWith('.safetensors'))
+      weights.push(...Object.entries(mx.load(`${dir}/${filename}`)));
+  }
+  weights = model.sanitize(weights);
+
   // Load weights.
-  model.loadWeights(Object.entries(weights));
+  model.loadWeights(weights);
   mx.eval(model.parameters());
   return model;
 }

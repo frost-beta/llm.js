@@ -3,7 +3,7 @@ import {BaseModel, BaseKVCache, baseModelArgs} from '../llm.js';
 import {VisionConfig, VisionModel} from './llava/vision.js';
 import * as llama from './llama.js';
 
-export interface LlaVAConfig {
+export interface ModelArgs {
   textConfig: llama.ModelArgs;
   visionConfig: VisionConfig;
   ignoreIndex: number;
@@ -13,26 +13,53 @@ export interface LlaVAConfig {
   vocabSize: number;
 }
 
-class LlavaMultiModalProjector extends nn.Module {
-  linear1: nn.Linear;
-  gelu: nn.GELU;
-  linear2: nn.Linear;
+export function modelArgs(json: any): ModelArgs {
+  const args = baseModelArgs(json);
+  args.textConfig = Object.assign({
+    hiddenSize: 4096,
+    numHiddenLayers: 32,
+    intermediateSize: 11008,
+    numAttentionHeads: 32,
+    rmsNormEps: 1e-6,
+    vocabSize: 32000,
+    ropeTheta: 10000,
+    tieWordEmbeddings: false,
+  }, args.textConfig);
+  args.visionConfig = Object.assign({
+    numHiddenLayers: 24,
+    hiddenSize: 1024,
+    intermediateSize: 4096,
+    numAttentionHeads: 16,
+    imageSize: 335,
+    patchSize: 14,
+    projectionDim: 768,
+    vocabSize: 3200,
+    numChannels: 3,
+    layerNormEps: 1e-5,
+  }, args.visionConfig);
+  return args;
+}
 
-  constructor(config: LlaVAConfig) {
+class LlavaMultiModalProjector extends nn.Module {
+  linear_1: nn.Linear;
+  gelu: nn.GELU;
+  linear_2: nn.Linear;
+
+  constructor(args: ModelArgs) {
     super();
-    this.linear1 = new nn.Linear(config.visionConfig.hiddenSize, config.textConfig.hiddenSize, true);
+    this.linear_1 = new nn.Linear(args.visionConfig.hiddenSize, args.textConfig.hiddenSize, true);
     this.gelu = new nn.GELU();
-    this.linear2 = new nn.Linear(config.textConfig.hiddenSize, config.textConfig.hiddenSize, true);
+    this.linear_2 = new nn.Linear(args.textConfig.hiddenSize, args.textConfig.hiddenSize, true);
   }
 
   forward(x: mx.array) {
-    x = this.linear1.forward(x);
+    x = this.linear_1.forward(x);
     x = this.gelu.forward(x);
-    return this.linear2.forward(x);
+    return this.linear_2.forward(x);
   }
 }
 
-export class Model extends nn.Module {
+export class Model extends BaseModel {
   visionTower: VisionModel;
   languageModel: llama.Model;
   multiModalProjector: LlavaMultiModalProjector;
@@ -40,14 +67,15 @@ export class Model extends nn.Module {
   visionFeatureLayer: number;
   visionFeatureSelectStrategy: string;
 
-  constructor(config: LlaVAConfig) {
+  constructor(args: ModelArgs) {
     super();
-    this.visionTower = new VisionModel(config.visionConfig);
-    this.languageModel = new llama.Model(config.textConfig);
-    this.multiModalProjector = new LlavaMultiModalProjector(config);
-    this.imageTokenIndex = config.imageTokenIndex;
-    this.visionFeatureLayer = config.visionFeatureLayer;
-    this.visionFeatureSelectStrategy = config.visionFeatureSelectStrategy;
+    args = modelArgs(args);
+    this.visionTower = new VisionModel(args.visionConfig);
+    this.languageModel = new llama.Model(args.textConfig);
+    this.multiModalProjector = new LlavaMultiModalProjector(args);
+    this.imageTokenIndex = args.imageTokenIndex;
+    this.visionFeatureLayer = args.visionFeatureLayer;
+    this.visionFeatureSelectStrategy = args.visionFeatureSelectStrategy;
   }
 
   getInputEmbeddings(inputIds?: mx.array, pixelValues?: mx.array) {
@@ -75,9 +103,43 @@ export class Model extends nn.Module {
     return this.mergeInputIdsWithImageFeatures(imageFeatures, inputsEmbeds, inputIds);
   }
 
-  forward(inputIds: mx.array, pixelValues: mx.array, cache?: BaseKVCache[]) {
+  forward(inputs: mx.array, cache?: BaseKVCache[]) {
+    return this.languageModel.forward(inputs, cache);
+  }
+
+  forwardWithPixels(inputIds: mx.array, pixelValues: mx.array, cache?: BaseKVCache[]) {
     const inputEmbddings = this.getInputEmbeddings(inputIds, pixelValues);
     return this.languageModel.forward(inputIds, cache, inputEmbddings);
+  }
+
+  sanitize(weights: [ string, mx.array ][]): [ string, mx.array ][] {
+    const sanitizedWeights: [ string, mx.array ][] = [];
+    for (const [ key, value ] of weights) {
+      // Remove unused position_ids.
+      if (key.includes('position_ids'))
+        continue;
+      // PyTorch Conv2d expects the weight tensor to be of shape:
+      // [out_channels, in_channels, kH, KW]
+      // MLX Conv2d expects the weight tensor to be of shape:
+      // [out_channels, kH, KW, in_channels]
+      if (key.endsWith('patch_embedding.weight'))
+        sanitizedWeights.push([ key, value.transpose(0, 2, 3, 1) ]);
+      else
+        sanitizedWeights.push([ key, value ]);
+    }
+    return sanitizedWeights;
+  }
+
+  get layers() {
+    return this.languageModel.layers as nn.Module[];
+  }
+
+  get headDim() {
+    return this.languageModel.headDim;
+  }
+
+  get nKVHeads() {
+    return this.languageModel.nKVHeads;
   }
 
   private mergeInputIdsWithImageFeatures(imageFeatures: mx.array, inputsEmbeds: mx.array, inputIds: mx.array) {
