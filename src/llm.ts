@@ -302,6 +302,14 @@ export async function loadModel(dir: string): Promise<BaseModel> {
     throw error;
   }
 
+  // Read and sanitize weights.
+  let weights: [ string, mx.array ][] = [];
+  for (const filename of readdirSync(dir)) {
+    if (filename.endsWith('.safetensors'))
+      weights.push(...Object.entries(mx.load(`${dir}/${filename}`)));
+  }
+  weights = model.sanitize(weights);
+
   // Quantization.
   if (config.quantization) {
     const predicate = (p: string, m: nn.Module) => {
@@ -312,14 +320,6 @@ export async function loadModel(dir: string): Promise<BaseModel> {
     const {groupSize, bits} = config.quantization;
     nn.quantize(model, groupSize, bits, predicate);
   }
-
-  // Read and sanitize weights.
-  let weights: [ string, mx.array ][] = [];
-  for (const filename of readdirSync(dir)) {
-    if (filename.endsWith('.safetensors'))
-      weights.push(...Object.entries(mx.load(`${dir}/${filename}`)));
-  }
-  weights = model.sanitize(weights);
 
   // Load weights.
   model.loadWeights(weights);
