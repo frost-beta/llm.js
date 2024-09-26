@@ -1,6 +1,8 @@
-import {readFileSync, readdirSync} from 'node:fs';
-import {TokenizerLoader} from '@lenml/tokenizers';
 import {core as mx, nn} from '@frost-beta/mlx';
+import {loadWeights, readJsonSync} from './fs.js';
+
+export * from './image-processor.js';
+export * from './tokenizer.js';
 
 /**
  * The base class of LLM models.
@@ -239,55 +241,6 @@ export function createAttentionMask(h: mx.array, cache?: BaseKVCache[]) {
 }
 
 /**
- * A message in chat models.
- */
-export interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
-/**
- * Wraps the tokenizer of transformers.js.
- */
-export class Tokenizer {
-  bosToken: number;
-  eosToken: number;
-  private tokenizer: ReturnType<typeof TokenizerLoader.fromPreTrained>;
-
-  constructor(dir: string) {
-    this.tokenizer = TokenizerLoader.fromPreTrained({
-      tokenizerJSON: readJsonSync(`${dir}/tokenizer.json`),
-      tokenizerConfig: readJsonSync(`${dir}/tokenizer_config.json`),
-    });
-    // Do not strip the heading whitespace as it breaks streaming.
-    const {decoders} = this.tokenizer.decoder as any;
-    if (decoders?.at(-1)?.config?.type == 'Strip')
-      decoders.pop();
-    // Get EOS token.
-    const {tokens_to_ids} = this.tokenizer.model;
-    this.eosToken = tokens_to_ids.get(this.tokenizer.getToken('eos_token'));
-    // Some models do not have a BOS token, they use EOS instead.
-    this.bosToken = tokens_to_ids.get(this.tokenizer.getToken('bos_token')) ?? this.eosToken;
-  }
-
-  encode(text: string) {
-    return this.tokenizer.encode(text);
-  }
-
-  decode(tokens: number[]) {
-    return this.tokenizer.decode(tokens);
-  }
-
-  applyChatTemplate(messages: Message[]): number[] {
-    return this.tokenizer.apply_chat_template(messages, {
-      add_generation_prompt: true,
-      // https://github.com/xenova/transformers.js/issues/879
-      tools: null,
-    } as unknown) as number[];
-  }
-}
-
-/**
  * Load the model from directory.
  */
 export async function loadModel(dir: string): Promise<BaseModel> {
@@ -306,11 +259,7 @@ export async function loadModel(dir: string): Promise<BaseModel> {
   }
 
   // Read and sanitize weights.
-  const weights: Record<string, mx.array> = {};
-  for (const filename of readdirSync(dir)) {
-    if (filename.endsWith('.safetensors'))
-      Object.assign(weights, mx.load(`${dir}/${filename}`));
-  }
+  const weights = loadWeights(dir);
   model.sanitize(weights);
 
   // Quantization.
@@ -418,9 +367,4 @@ export function topPSampling(logits: mx.array, topP = 1, temperature = 1): mx.ar
 
   const sortedToken = mx.random.categorical(mx.log(topProbs));
   return sortedIndices.squeeze(0).index(sortedToken);
-}
-
-// Helper for reading a .json file.
-function readJsonSync(path: string) {
-  return JSON.parse(String(readFileSync(path)));
 }

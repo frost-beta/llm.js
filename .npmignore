@@ -11,3 +11,7 @@ package-lock.json
 npm-debug.log
 yarn-error.log
 /node_modules/
+
+/Meta-Llama-*/
+/Qwen*/
+/llava-*/
