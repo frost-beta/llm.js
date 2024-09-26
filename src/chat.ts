@@ -1,15 +1,23 @@
 #!/usr/bin/env node
 
 import readline from 'node:readline/promises';
-import {core as mx} from '@frost-beta/mlx'
-import {BaseModel, Message, Tokenizer, loadModel, step} from './llm.js'
+import {core as mx} from '@frost-beta/mlx';
+import {
+  BaseModel,
+  BaseKVCache,
+  RotatingKVCache,
+  Message,
+  Tokenizer,
+  loadModel,
+  step,
+} from './llm.js';
 
 if (process.argv.length < 3) {
   console.error('Usage: llm-chat /path/to/weights/dir');
   process.exit(0);
 }
 
-main(process.argv[2])
+main(process.argv[2]);
 
 async function main(dir: string) {
   // Load tokenizer.
@@ -17,6 +25,7 @@ async function main(dir: string) {
 
   // Load model.
   const model = await loadModel(dir);
+  const kvCache = RotatingKVCache.createForModel(model);
 
   // Records the messages.
   const messages: Message[] = [];
@@ -31,20 +40,23 @@ async function main(dir: string) {
     const question = await rl.question('You> ')
     messages.push({role: 'user', content: question});
     process.stdout.write('Assistant> ');
-    const reply = await talk(tokenizer, model, messages);
+    const reply = await talk(tokenizer, model, kvCache, messages);
     messages.push({role: 'assistant', content: reply});
   }
 }
 
 // Send full messages history to model and get response.
-async function talk(tokenizer: Tokenizer, model: BaseModel, messages: Message[]) {
+async function talk(tokenizer: Tokenizer,
+                    model: BaseModel,
+                    kvCache: BaseKVCache[],
+                    messages: Message[]) {
   // Translate the messages to tokens.
   const promptTokens = tokenizer.applyChatTemplate(messages);
 
   // Predict next tokens.
   let tokens: number[] = [];
   let text = '';
-  for await (const [ token ] of step(promptTokens, model, tokenizer.eosToken)) {
+  for await (const [ token ] of step(promptTokens, model, tokenizer.eosToken, {kvCache})) {
     tokens.push(token);
     const char = tokenizer.decode(tokens);
     // The token may represent an incomplete unicode char.

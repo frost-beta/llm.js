@@ -31,6 +31,15 @@ export abstract class BaseKVCache {
   offset = 0;
   step = 256;
 
+  static createForModel<T extends BaseKVCache>(
+      model: BaseModel,
+      construct: new (headDim: number, nKVHeads: number) => T) {
+    const cache: BaseKVCache[] = [];
+    for (let i = 0; i < model.layers.length; ++i)
+      cache[i] = new construct(model.headDim, model.nKVHeads);
+    return cache;
+  }
+
   abstract updateAndFetch(keys: mx.array, values: mx.array): [ mx.array, mx.array ];
 
   get state() {
@@ -48,6 +57,10 @@ export class KVCache extends BaseKVCache {
   constructor(public headDim: number,
               public nKVHeads: number) {
     super();
+  }
+
+  static createForModel(model: BaseModel) {
+    return BaseKVCache.createForModel<KVCache>(model, KVCache);
   }
 
   override updateAndFetch(keys: mx.array, values: mx.array): [ mx.array, mx.array ] {
@@ -94,6 +107,10 @@ export class RotatingKVCache extends BaseKVCache {
   kHeadDim: number;
   vHeadDim: number;
   #idx = 0;
+
+  static createForModel(model: BaseModel) {
+    return BaseKVCache.createForModel(model, RotatingKVCache);
+  }
 
   constructor(headDim: number,
               public nKVHeads: number,
@@ -283,6 +300,7 @@ export async function loadModel(dir: string): Promise<BaseModel> {
  * Options passed to step.
  */
 export interface StepOptions {
+  kvCache?: BaseKVCache[];
   topP?: number;
   temperature?: number;
 }
@@ -294,13 +312,12 @@ export async function* step(promptTokens: number[],
                             model: BaseModel,
                             eosToken: number,
                             {
+                              kvCache,
                               topP = 0.8,
                               temperature = 1,
                             }: StepOptions = {}): AsyncGenerator<[ number, number ], void> {
-  // Create KV Cache.
-  const cache: BaseKVCache[] = [];
-  for (let i = 0; i < model.layers.length; ++i)
-    cache[i] = new RotatingKVCache(model.headDim, model.nKVHeads);
+  // Create KV Cache if none is specified in options.
+  const cache = kvCache ?? RotatingKVCache.createForModel(model);
 
   // Feed the tokens to model and get predictions.
   const forward = (y: number[]): [ number, number, BaseKVCache[] ] => {
@@ -338,7 +355,8 @@ export async function* step(promptTokens: number[],
   }
 
   // Make sure cache is cleared after generation is done.
-  mx.dispose(cache);
+  if (!kvCache)
+    mx.dispose(cache);
 }
 
 /**
