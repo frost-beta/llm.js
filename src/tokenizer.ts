@@ -10,12 +10,20 @@ export interface Message {
 }
 
 /**
+ * Options for chat template.
+ */
+export interface ChatTemplateOptions {
+  trimSystemPrompt?: boolean;
+}
+
+/**
  * Wraps the tokenizer of transformers.js.
  */
 export class Tokenizer {
   bosToken: number;
   eosToken: number;
   private tokenizer: ReturnType<typeof TokenizerLoader.fromPreTrained>;
+  private systemPromptLength?: number;
 
   constructor(dir: string) {
     this.tokenizer = TokenizerLoader.fromPreTrained({
@@ -41,11 +49,25 @@ export class Tokenizer {
     return this.tokenizer.decode(tokens);
   }
 
-  applyChatTemplate(messages: Message[]): number[] {
-    return this.tokenizer.apply_chat_template(messages, {
+  applyChatTemplate(messages: Message[],
+                    {
+                      trimSystemPrompt = false,
+                    }: ChatTemplateOptions = {}): number[] {
+    if (trimSystemPrompt && this.systemPromptLength === undefined) {
+      // Get the automatically inserted system prompt by passing empty messages.
+      const systemPrompt = this.tokenizer.apply_chat_template([], {
+        add_generation_prompt: false,
+        tools: null,
+      } as unknown) as number[];
+      this.systemPromptLength = systemPrompt.length;
+    }
+    const tokens = this.tokenizer.apply_chat_template(messages, {
       add_generation_prompt: true,
       // https://github.com/xenova/transformers.js/issues/879
       tools: null,
     } as unknown) as number[];
+    if (trimSystemPrompt)
+      return tokens.slice(this.systemPromptLength);
+    return tokens;
   }
 }

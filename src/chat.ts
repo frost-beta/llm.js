@@ -43,7 +43,7 @@ async function main(dir: string) {
     const question = await rl.question('You> ')
     messages.push({role: 'user', content: question});
     process.stdout.write('Assistant> ');
-    const reply = await talk(tokenizer, model, kvCache, messages.slice(-1));
+    const reply = await talk(tokenizer, model, kvCache, messages.slice(-1), messages.length == 1);
     messages.push({role: 'assistant', content: reply});
   }
 }
@@ -52,9 +52,12 @@ async function main(dir: string) {
 async function talk(tokenizer: Tokenizer,
                     model: BaseModel,
                     kvCache: BaseKVCache[],
-                    messages: Message[]) {
+                    messages: Message[],
+                    firstMessage: boolean) {
   // Translate the messages to tokens.
-  const promptTokens = tokenizer.applyChatTemplate(messages);
+  // Note that some chat templates add a system prompt automatically and we need
+  // to trim it when generating tokens for only new messages.
+  const promptTokens = tokenizer.applyChatTemplate(messages, {trimSystemPrompt: !firstMessage});
 
   // Predict next tokens.
   let tokens: number[] = [];
