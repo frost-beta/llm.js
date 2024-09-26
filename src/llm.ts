@@ -8,7 +8,12 @@ export * from './tokenizer.js';
  * The base class of LLM models.
  */
 export abstract class BaseModel extends nn.Module {
-  abstract forward(inputs: mx.array, cache?: BaseKVCache[]): mx.array;
+  abstract computeTextEmbeddings(inputs: mx.array): mx.array;
+  abstract forwardEmbeddings(embeddings: mx.array, cache?: BaseKVCache[]): mx.array;
+
+  override forward(inputs: mx.array, cache?: BaseKVCache[]): mx.array {
+    return this.forwardEmbeddings(this.computeTextEmbeddings(inputs), cache);
+  }
 
   forwardWithPixels(inputIds: mx.array, pixelValues: mx.array, cache?: BaseKVCache[]): mx.array {
     return this.forward(inputIds, cache);
@@ -59,7 +64,7 @@ export class KVCache extends BaseKVCache {
     super();
   }
 
-  static createForModel(model: BaseModel) {
+  static override createForModel(model: BaseModel) {
     return BaseKVCache.createForModel<KVCache>(model, KVCache);
   }
 
@@ -108,7 +113,7 @@ export class RotatingKVCache extends BaseKVCache {
   vHeadDim: number;
   #idx = 0;
 
-  static createForModel(model: BaseModel) {
+  static override createForModel(model: BaseModel) {
     return BaseKVCache.createForModel(model, RotatingKVCache);
   }
 

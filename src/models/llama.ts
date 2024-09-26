@@ -241,14 +241,11 @@ class LlamaModel extends nn.Module {
     this.norm = new nn.RMSNorm(args.hiddenSize, args.rmsNormEps);
   }
 
-  forward(inputs: mx.array, cache?: BaseKVCache[], inputEmbeds?: mx.array) {
-    let h = inputEmbeds ?? this.embedTokens.forward(inputs);
-
+  forward(embeddings: mx.array, cache?: BaseKVCache[]) {
+    let h = embeddings;
     const mask = createAttentionMask(h, cache);
-
     for (let i in this.layers)
       h = this.layers[i].forward(h, mask, cache ? cache[i] : undefined);
-
     return this.norm.forward(h);
   }
 }
@@ -268,23 +265,27 @@ export class Model extends BaseModel {
       this.lmHead = new nn.Linear(args.hiddenSize, args.vocabSize, false);
   }
 
-  forward(inputs: mx.array, cache?: BaseKVCache[], inputEmbeds?: mx.array) {
-    const out = this.model.forward(inputs, cache, inputEmbeds);
+  override computeTextEmbeddings(inputs: mx.array): mx.array {
+    return this.model.embedTokens.forward(inputs);
+  }
+
+  override forwardEmbeddings(embeddings: mx.array, cache?: BaseKVCache[]): mx.array {
+    const out = this.model.forward(embeddings, cache);
     if (this.args.tieWordEmbeddings)
       return this.model.embedTokens.asLinear(out);
     else
       return this.lmHead.forward(out);
   }
 
-  get layers() {
+  override get layers() {
     return this.model.layers;
   }
 
-  get headDim() {
+  override get headDim() {
     return Math.floor(this.args.hiddenSize / this.args.numAttentionHeads);
   }
 
-  get nKVHeads() {
+  override get nKVHeads() {
     return this.args.numKeyValueHeads;
   }
 }

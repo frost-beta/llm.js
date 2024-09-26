@@ -103,16 +103,20 @@ export class Model extends BaseModel {
     return this.mergeInputIdsWithImageFeatures(imageFeatures, inputsEmbeds, inputIds);
   }
 
-  forward(inputs: mx.array, cache?: BaseKVCache[]) {
-    return this.languageModel.forward(inputs, cache);
+  override computeTextEmbeddings(inputs: mx.array): mx.array {
+    return this.languageModel.computeTextEmbeddings(inputs);
   }
 
-  forwardWithPixels(inputIds: mx.array, pixelValues: mx.array, cache?: BaseKVCache[]) {
-    const inputEmbddings = this.getInputEmbeddings(inputIds, pixelValues);
-    return this.languageModel.forward(inputIds, cache, inputEmbddings);
+  override forwardEmbeddings(embeddings: mx.array, cache?: BaseKVCache[]): mx.array {
+    return this.languageModel.forwardEmbeddings(embeddings, cache);
   }
 
-  sanitize(weights: Record<string, mx.array>) {
+  override forwardWithPixels(inputIds: mx.array, pixelValues: mx.array, cache?: BaseKVCache[]) {
+    const embeddings = this.getInputEmbeddings(inputIds, pixelValues);
+    return this.forwardEmbeddings(embeddings, cache);
+  }
+
+  override sanitize(weights: Record<string, mx.array>) {
     for (const key in weights) {
       // Remove unused position_ids.
       if (key.includes('position_ids'))
@@ -130,15 +134,15 @@ export class Model extends BaseModel {
     }
   }
 
-  get layers() {
+  override get layers() {
     return this.languageModel.layers as nn.Module[];
   }
 
-  get headDim() {
+  override get headDim() {
     return this.languageModel.headDim;
   }
 
-  get nKVHeads() {
+  override get nKVHeads() {
     return this.languageModel.nKVHeads;
   }
 

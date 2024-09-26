@@ -7,6 +7,7 @@
     "target": "es2023",
     "lib": [ "esnext" ],
     "esModuleInterop": true,
+    "noImplicitOverride": true,
     "noImplicitAny": true
   },
   "include": [ "src" ],
