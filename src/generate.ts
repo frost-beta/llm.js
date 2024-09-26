@@ -36,7 +36,7 @@ async function main(dir: string, prompt: string) {
   // Generation.
   let tokens: number[] = [];
   let count = 0;
-  for await (const [ token ] of step(promptTokens, model, eosToken, 0.8)) {
+  for await (const [ token ] of step(promptTokens, model, eosToken)) {
     if (++count > maxTokens)
       break;
     tokens.push(token);

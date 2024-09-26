@@ -280,13 +280,23 @@ export async function loadModel(dir: string): Promise<BaseModel> {
 }
 
 /**
+ * Options passed to step.
+ */
+export interface StepOptions {
+  topP?: number;
+  temperature?: number;
+}
+
+/**
  * Generate tokens from prompt.
  */
 export async function* step(promptTokens: number[],
                             model: BaseModel,
                             eosToken: number,
-                            topP = 1,
-                            temperature = 1): AsyncGenerator<[ number, number ], void> {
+                            {
+                              topP = 0.8,
+                              temperature = 1,
+                            }: StepOptions = {}): AsyncGenerator<[ number, number ], void> {
   // Create KV Cache.
   const cache: BaseKVCache[] = [];
   for (let i = 0; i < model.layers.length; ++i)

@@ -20,7 +20,7 @@ export interface ProcessedImage {
   info: sharp.OutputInfo;
 }
 
-export class ClipImageProcessor {
+export class ImageProcessor {
   cropSize: {width: number, height: number};
   shortestEdge: number;
 

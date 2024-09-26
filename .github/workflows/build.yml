@@ -22,10 +22,10 @@ jobs:
           echo Hello | yarn tsx src/chat.ts Meta-Llama-3-8B-Instruct-4bit
 
           huggingface download --silent Qwen/Qwen2-0.5B
-          yarn tsx src/generate.ts Qwen2-0.5B --max-tokens=128
+          yarn tsx src/generate.ts --max-tokens=128 Qwen2-0.5B
 
           huggingface download --silent llava-hf/llava-1.5-7b-hf
-          yarn tsx src/generate.ts llava-1.5-7b-hf 'USER: How are you?\nASSISTANT:'
+          yarn tsx src/generate.ts --max-tokens=128 llava-1.5-7b-hf 'USER: How are you?\nASSISTANT:'
 
   publish:
     if: startsWith(github.ref, 'refs/tags/')

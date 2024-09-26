@@ -44,7 +44,7 @@ async function talk(tokenizer: Tokenizer, model: BaseModel, messages: Message[])
   // Predict next tokens.
   let tokens: number[] = [];
   let text = '';
-  for await (const [ token ] of step(promptTokens, model, tokenizer.eosToken, 0.8)) {
+  for await (const [ token ] of step(promptTokens, model, tokenizer.eosToken)) {
     tokens.push(token);
     const char = tokenizer.decode(tokens);
     // The token may represent an incomplete unicode char.

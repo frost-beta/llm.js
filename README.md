@@ -27,22 +27,24 @@ Note: Models using data types other than `float32` require GPU support.
 ## APIs
 
 ```typescript
+import sharp from 'sharp';
 import { core as mx, nn } from '@frost-beta/mlx';
 
 export abstract class BaseModel extends nn.Module {
+    abstract forward(inputs: mx.array,
+                     cache?: BaseKVCache[]): mx.array;
+    forwardWithPixels(inputIds: mx.array,
+                      pixelValues: mx.array,
+                      cache?: BaseKVCache[]): mx.array;
+    sanitize(weights: Record<string, mx.array>): void;
     abstract get layers(): nn.Module[];
     abstract get headDim(): number;
     abstract get nKVHeads(): number;
-    abstract forward(inputs: mx.array, cache?: KVCache[]): mx.array;
 }
 
 export abstract class BaseKVCache {
-    keys?: mx.array;
-    values?: mx.array;
-    offset: number;
-    step: number;
-    abstract updateAndFetch(keys: mx.array, values: mx.array): [mx.array, mx.array];
-    get state(): mx.array[];
+    abstract updateAndFetch(keys: mx.array,
+                            values: mx.array): [mx.array, mx.array];
 }
 
 export class KVCache extends BaseKVCache {
@@ -52,6 +54,29 @@ export class KVCache extends BaseKVCache {
 export class RotatingKVCache extends BaseKVCache {
     constructor(headDim: number, nKVHeads: number, maxSize = 1024, keep = 4);
 }
+
+export async function loadModel(dir: string): Promise<BaseModel>;
+
+export interface StepOptions {
+    topP?: number;
+    temperature?: number;
+}
+
+export async function* step(promptTokens: number[],
+                            model: BaseModel,
+                            eosToken: number,
+                            {
+                                topP = 0.8,
+                                temperature = 1,
+                            }?: StepOptions): AsyncGenerator<[number, number], void>;
+
+export function sample(logits: mx.array,
+                       topP?: number,
+                       temperature?: number): [mx.array, mx.array];
+
+export function topPSampling(logits: mx.array,
+                             topP?: number,
+                             temperature?: number): mx.array;
 
 export interface Message {
     role: 'user' | 'assistant';
@@ -67,21 +92,36 @@ export class Tokenizer {
     applyChatTemplate(messages: Message[]): number[];
 }
 
-export async function loadModel(dir: string): Promise<BaseModel>;
+export type ImageInputType = Buffer | ArrayBuffer | string;
 
-export async function* step(promptTokens: number[],
-                            model: BaseModel,
-                            eosToken: number,
-                            topP?: number,
-                            temperature?: number): AsyncGenerator<[number, number], void>;
+export interface PreprocessorConfig {
+    cropSize: number | {
+        width: number;
+        height: number;
+    };
+    doCenterCrop: boolean;
+    doNormalize: boolean;
+    doRescale: boolean;
+    doResize: boolean;
+    imageMean?: number[];
+    imageStd?: number[];
+    rescaleFactor?: number;
+    size: number | {
+        shortestEdge: number;
+    };
+}
 
-export function sample(logits: mx.array,
-                       topP?: number,
-                       temperature?: number): [mx.array, mx.array];
+export interface ProcessedImage {
+    data: Buffer;
+    info: sharp.OutputInfo;
+}
 
-export function topPSampling(logits: mx.array,
-                             topP?: number,
-                             temperature?: number): mx.array;
+export declare class ImageProcessor {
+    constructor(config: PreprocessorConfig);
+    processImage(input: ImageInputType): Promise<ProcessedImage>;
+    processImages(inputs: ImageInputType[]): Promise<ProcessedImage[]>;
+    normalizeImages(images: ProcessedImage[]): mx.array;
+}
 ```
 
 Check [`chat.ts`](https://github.com/frost-beta/llm.js/blob/main/src/chat.ts)
