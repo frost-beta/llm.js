@@ -231,7 +231,8 @@ export function baseModelArgs<T>(args: T): T {
 export function createAdditiveCausalMask(N: number, offset = 0) {
   const rinds = mx.arange(offset + N);
   const linds = offset ? mx.arange(offset, offset + N) : rinds;
-  const mask = mx.less(linds.index(mx.Slice(), mx.newaxis), rinds.index(mx.newaxis));
+  const mask = mx.less(linds.index(mx.Slice(), mx.newaxis),
+                       rinds.index(mx.newaxis));
   return mx.multiply(mask, -1e9);
 }
 
@@ -242,7 +243,7 @@ export function createAttentionMask(h: mx.array, cache?: BaseKVCache[]) {
   const T = h.shape[1];
   if (T > 1) {
     let offset: number;
-    if (cache && cache[0]) {
+    if (cache) {
       const c = cache[0];
       if (c instanceof RotatingKVCache)
         offset = Math.min(c.maxSize - 1, c.offset);
@@ -328,7 +329,7 @@ export async function* step(promptTokens: number[],
     return [ token.item() as number, prob.item() as number, cache ];
   }
 
-  // Prefill the prompt tokens.
+  // Forward prompt by steps so we don't use too much RAM.
   // See also https://github.com/ml-explore/mlx-examples/pull/931
   const prefillStepSize = 512;
   let tokens = promptTokens;
@@ -354,9 +355,10 @@ export async function* step(promptTokens: number[],
     });
   }
 
-  // Make sure cache is cleared after generation is done.
-  if (!kvCache)
+  // Make sure the temporary cache is cleared after generation is done.
+  if (!kvCache) {
     mx.dispose(cache);
+  }
 }
 
 /**

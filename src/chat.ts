@@ -5,7 +5,7 @@ import {core as mx} from '@frost-beta/mlx';
 import {
   BaseModel,
   BaseKVCache,
-  RotatingKVCache,
+  KVCache,
   Message,
   Tokenizer,
   loadModel,
@@ -25,7 +25,10 @@ async function main(dir: string) {
 
   // Load model.
   const model = await loadModel(dir);
-  const kvCache = RotatingKVCache.createForModel(model);
+
+  // Use normal cache instead of rotating one.
+  // See also https://github.com/ml-explore/mlx-examples/issues/1000
+  const kvCache = KVCache.createForModel(model);
 
   // Records the messages.
   const messages: Message[] = [];
@@ -40,7 +43,7 @@ async function main(dir: string) {
     const question = await rl.question('You> ')
     messages.push({role: 'user', content: question});
     process.stdout.write('Assistant> ');
-    const reply = await talk(tokenizer, model, kvCache, messages);
+    const reply = await talk(tokenizer, model, kvCache, messages.slice(-1));
     messages.push({role: 'assistant', content: reply});
   }
 }
