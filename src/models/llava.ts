@@ -121,8 +121,12 @@ export class Model extends BaseModel {
       // [out_channels, in_channels, kH, KW]
       // MLX Conv2d expects the weight tensor to be of shape:
       // [out_channels, kH, KW, in_channels]
-      if (key.endsWith('patch_embedding.weight'))
-        weights[key] = weights[key].transpose(0, 2, 3, 1);
+      if (key.endsWith('patch_embedding.weight')) {
+        // Some mlx-community models already transposed it for us.
+        const {shape} = weights[key];
+        if (shape[1] != shape[2])
+          weights[key] = weights[key].transpose(0, 2, 3, 1);
+      }
     }
   }
 
