@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import {core as mx} from '@frost-beta/mlx';
 import {loadLLM} from './llm.js';
 
 let maxTokens = 512;
@@ -29,10 +30,13 @@ async function main(dir: string, prompt?: string) {
   if (promptTokens.length > 1 && promptTokens.at(-1) === eosToken)
     promptTokens = promptTokens.slice(0, -1);
 
+  const promptTensor = mx.array(promptTokens, mx.int32).index(mx.newaxis);
+  const promptEmbeds = llm.model.computeTextEmbeddings(promptTensor);
+
   // Generation.
   if (prompt)
     process.stdout.write(prompt);
-  for await (const text of llm.generate(promptTokens, {maxTokens}))
+  for await (const text of llm.generate(promptEmbeds, {maxTokens}))
     process.stdout.write(text);
   process.stdout.write('\n');
 }

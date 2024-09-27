@@ -189,7 +189,7 @@ export interface StepOptions {
 /**
  * Generate tokens from prompt.
  */
-export async function* step(promptTokens: number[],
+export async function* step(promptEmbeds: mx.array,
                             model: BaseModel,
                             eosToken: number,
                             {
@@ -200,6 +200,29 @@ export async function* step(promptTokens: number[],
   // Create KV Cache if none is specified in options.
   const cache = kvCache ?? RotatingKVCache.createForModel(model);
 
+  let tokens: number[] = [];
+
+  // Forward prompt by steps so we don't use too much RAM.
+  // See also https://github.com/ml-explore/mlx-examples/pull/931
+  const prefillStepSize = 512;
+  const embeddingsSize = promptEmbeds.shape[1];
+  for (let offset = 0; offset < embeddingsSize;) {
+    let logits: mx.array;
+    mx.tidy(() => {
+      const size = Math.min(prefillStepSize, embeddingsSize - offset);
+      const chunk = promptEmbeds.index(mx.Slice(), mx.Slice(offset, size));
+      logits = model.forwardEmbeddings(chunk);
+      mx.eval(cache.map(c => c.state));
+      offset += size;
+      if (offset == embeddingsSize) {
+        logits = logits.index(mx.Slice(), -1, mx.Slice());
+        const [ token, prob ] = sample(logits, topP, temperature);
+        tokens.push(token.item() as number);
+      }
+      return cache;
+    });
+  }
+
   // Feed the tokens to model and get predictions.
   const forward = (y: number[]): [ number, number, BaseKVCache[] ] => {
     let logits = model.forward(mx.array([ y ], mx.int32), cache);
@@ -207,19 +230,6 @@ export async function* step(promptTokens: number[],
     const [ token, prob ] = sample(logits, topP, temperature);
     // The cache is also returned so it does not get freed by mx.tidy().
     return [ token.item() as number, prob.item() as number, cache ];
-  }
-
-  // Forward prompt by steps so we don't use too much RAM.
-  // See also https://github.com/ml-explore/mlx-examples/pull/931
-  const prefillStepSize = 512;
-  let tokens = promptTokens;
-  while (tokens.length > prefillStepSize) {
-    mx.tidy(() => {
-      model.forward(mx.array(tokens.slice(0, prefillStepSize), mx.int32).index(mx.newaxis), cache);
-      mx.eval(cache.map(c => c.state));
-      tokens = tokens.slice(prefillStepSize);
-      return cache;
-    });
   }
 
   while (true) {

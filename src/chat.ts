@@ -40,9 +40,12 @@ async function talk(llm: LLM, messages: Message[], firstMessage: boolean) {
   // to trim it when generating tokens for only new messages.
   const promptTokens = llm.tokenizer.applyChatTemplate(messages, {trimSystemPrompt: !firstMessage});
 
+  const promptTensor = mx.array(promptTokens, mx.int32).index(mx.newaxis);
+  const promptEmbeds = llm.model.computeTextEmbeddings(promptTensor);
+
   // Predict next tokens.
   let result = '';
-  for await (const text of llm.generate(promptTokens)) {
+  for await (const text of llm.generate(promptEmbeds)) {
     result += text;
     process.stdout.write(text);
   }
