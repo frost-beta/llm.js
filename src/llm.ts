@@ -23,7 +23,7 @@ export class LLM {
                   {maxTokens}: LLMGenerateOptions = {}) {
     // Predict next tokens.
     let buffer: number[] = [];
-    for await (const [ token ] of step(promptEmbeds, this.model, this.tokenizer.eosToken)) {
+    for await (const token of step(promptEmbeds, this.model, this.tokenizer.eosToken)) {
       buffer.push(token);
       const text = this.tokenizer.decode(buffer);
       // The token may represent an incomplete unicode char.

@@ -196,54 +196,51 @@ export async function* step(promptEmbeds: mx.array,
                               kvCache,
                               topP = 0.8,
                               temperature = 1,
-                            }: StepOptions = {}): AsyncGenerator<[ number, number ], void> {
+                            }: StepOptions = {}): AsyncGenerator<number, void> {
   // Create KV Cache if none is specified in options.
   const cache = kvCache ?? RotatingKVCache.createForModel(model);
 
-  let tokens: number[] = [];
+  // Sample the logits results.
+  const predict = (logits: mx.array) => {
+    logits = logits.index(mx.Slice(), -1);
+    const [ token ] = sample(logits, topP, temperature);
+    return token.item() as number;
+  };
 
   // Forward prompt by steps so we don't use too much RAM.
   // See also https://github.com/ml-explore/mlx-examples/pull/931
+  let nextToken: number;
   const prefillStepSize = 512;
   const embeddingsSize = promptEmbeds.shape[1];
   for (let offset = 0; offset < embeddingsSize;) {
-    let logits: mx.array;
     mx.tidy(() => {
       const size = Math.min(prefillStepSize, embeddingsSize - offset);
-      const chunk = promptEmbeds.index(mx.Slice(), mx.Slice(offset, size));
-      logits = model.forwardEmbeddings(chunk);
+      const chunk = promptEmbeds.index(mx.Slice(), mx.Slice(offset, offset + size));
+      const logits = model.forwardEmbeddings(chunk, cache);
       mx.eval(cache.map(c => c.state));
       offset += size;
-      if (offset == embeddingsSize) {
-        logits = logits.index(mx.Slice(), -1, mx.Slice());
-        const [ token, prob ] = sample(logits, topP, temperature);
-        tokens.push(token.item() as number);
-      }
+      // Do token-by-token generation after prompt is consumed.
+      if (offset == embeddingsSize)
+        nextToken = predict(logits);
+      // Keep the cache from being released.
       return cache;
     });
   }
 
-  // Feed the tokens to model and get predictions.
-  const forward = (y: number[]): [ number, number, BaseKVCache[] ] => {
-    let logits = model.forward(mx.array([ y ], mx.int32), cache);
-    logits = logits.index(mx.Slice(), -1, mx.Slice());
-    const [ token, prob ] = sample(logits, topP, temperature);
-    // The cache is also returned so it does not get freed by mx.tidy().
-    return [ token.item() as number, prob.item() as number, cache ];
-  }
-
-  while (true) {
-    // Forward the tokens to model, and make sure intermediate tensors are freed.
-    const [ token, prob ] = mx.tidy(() => forward(tokens));
+  do {
     // Quit after getting EOS.
-    if (token == eosToken)
+    if (nextToken == eosToken)
       break;
-    tokens = [ token ];
     // Yield the result in the next tick of loop, so GC can get a chance to run.
-    yield await new Promise(resolve => {
-      process.nextTick(() => resolve([ token, prob ]));
+    await new Promise(resolve => process.nextTick(resolve));
+    yield nextToken;
+    // Forward the token to model and free intermediate tensors.
+    [ nextToken ] = mx.tidy(() => {
+      const logits = model.forward(mx.array([ [ nextToken ] ], mx.int32), cache);
+      // The cache is also returned so it does not get freed by mx.tidy().
+      return [ predict(logits), cache ];
     });
-  }
+  } while (true);
 
   // Make sure the temporary cache is cleared after generation is done.
   if (!kvCache) {
