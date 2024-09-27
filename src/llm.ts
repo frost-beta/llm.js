@@ -12,6 +12,29 @@ export interface LLMGenerateOptions extends StepOptions {
 }
 
 /**
+ * Parse the args for the generate options.
+ */
+export function parseArgs(args: string[]): [ string[], LLMGenerateOptions ] {
+  const options: LLMGenerateOptions = {};
+  args = args.filter((arg) => {
+    if (arg.startsWith('--max-tokens=')) {
+      options.maxTokens = parseInt(arg.substring(arg.indexOf('=') + 1));
+      return false;
+    }
+    if (arg.startsWith('--temperature=')) {
+      options.temperature = parseFloat(arg.substring(arg.indexOf('=') + 1));
+      return false;
+    }
+    if (arg.startsWith('--top-p=')) {
+      options.topP = parseFloat(arg.substring(arg.indexOf('=') + 1));
+      return false;
+    }
+    return true;
+  });
+  return [ args, options ];
+}
+
+/**
  * Wraps language models with or without vision.
  */
 export class LLM {

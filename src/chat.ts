@@ -2,15 +2,16 @@
 
 import readline from 'node:readline/promises';
 import {core as mx} from '@frost-beta/mlx';
-import {LLM, loadLLM} from './llm.js';
+import {LLM, parseArgs, loadLLM} from './llm.js';
 import {Message} from './tokenizer.js';
 
-if (process.argv.length < 3) {
-  console.error('Usage: llm-chat /path/to/weights/dir');
+const [ argv, options ] = parseArgs(process.argv.slice(2));
+if (argv.length < 1) {
+  console.error('Usage: llm-chat /path/to/weights/dir [--max-tokens=512]');
   process.exit(0);
 }
 
-main(process.argv[2]);
+main(argv[0]);
 
 async function main(dir: string) {
   const llm = await loadLLM(dir);
