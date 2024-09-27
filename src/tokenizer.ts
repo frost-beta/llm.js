@@ -31,11 +31,12 @@ export class Tokenizer {
     if (!tokenizerConfig.chat_template && tokenizerConfig.processor_class == 'LlavaProcessor') {
       tokenizerConfig.chat_template =
         `{%- for message in messages %}
-            {{- message['role'].upper() + ': ' }}
-            {{- message['content'] + '\n' }}
+           {{- message['role'].upper() + ': ' }}
+           {{- message['content'] + '\n' }}
          {%- endfor %}
          {%- if add_generation_prompt %}
-             {{- 'ASSISTANT:' }}
+           {# Do not add whitespace after ':', which degrades the model. #}
+           {{- 'ASSISTANT:' }}
          {%- endif %}`;
     }
     // Create tokenizer.

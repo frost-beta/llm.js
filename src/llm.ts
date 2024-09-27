@@ -1,6 +1,7 @@
 import {fileURLToPath} from 'node:url';
 import {core as mx} from '@frost-beta/mlx';
 import {BaseModel, StepOptions, loadModel, step} from './base.js';
+import {BaseKVCache, KVCache} from './kv-cache.js';
 import {ChatTemplateOptions, Message, Tokenizer} from './tokenizer.js';
 import {ImageInputType, ImageProcessor} from './image-processor.js';
 
@@ -38,6 +39,8 @@ export function parseArgs(args: string[]): [ string[], LLMGenerateOptions ] {
  * Wraps language models with or without vision.
  */
 export class LLM {
+  kvCache?: BaseKVCache[];
+
   constructor(public model: BaseModel,
               public tokenizer: Tokenizer,
               public imageProcessor?: ImageProcessor) {
@@ -90,6 +93,12 @@ export class LLM {
    * Predict next tokens using the embeddings of prompt.
    */
   async *generate(promptEmbeds: mx.array, options: LLMGenerateOptions = {}) {
+    // If not specified, create a shared cache between generations.
+    if (!options.kvCache) {
+      if (!this.kvCache)
+        this.kvCache = KVCache.createForModel(this.model);
+      options.kvCache = this.kvCache;
+    }
     // Predict next tokens.
     let buffer: number[] = [];
     let count = 0;
