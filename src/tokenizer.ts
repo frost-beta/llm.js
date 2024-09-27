@@ -22,6 +22,7 @@ export interface ChatTemplateOptions {
 export class Tokenizer {
   bosToken: number;
   eosToken: number;
+  trimLeft = false;
   private tokenizer: ReturnType<typeof TokenizerLoader.fromPreTrained>;
   private systemPromptLength?: number;
 
@@ -42,10 +43,12 @@ export class Tokenizer {
     // Create tokenizer.
     const tokenizerJSON = readJsonSync(`${dir}/tokenizer.json`);
     this.tokenizer = TokenizerLoader.fromPreTrained({tokenizerJSON, tokenizerConfig});
-    // Do not strip the heading whitespace as it breaks streaming.
+    // Remove the strip decoder as it breaks streaming.
     const {decoders} = this.tokenizer.decoder as any;
-    if (decoders?.at(-1)?.config?.type == 'Strip')
+    if (decoders?.at(-1)?.config?.type == 'Strip') {
+      this.trimLeft = true;
       decoders.pop();
+    }
     // Get EOS token.
     const {tokens_to_ids} = this.tokenizer.model;
     this.eosToken = tokens_to_ids.get(this.tokenizer.getToken('eos_token'));

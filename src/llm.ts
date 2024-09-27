@@ -105,13 +105,17 @@ export class LLM {
     let buffer: number[] = [];
     let count = 0;
     for await (const token of step(promptEmbeds, this.model, this.tokenizer.eosToken, options)) {
-      if (options.maxTokens && ++count > options.maxTokens)
+      ++count;
+      if (options.maxTokens && count > options.maxTokens)
         break;
       buffer.push(token);
-      const text = this.tokenizer.decode(buffer);
+      let text = this.tokenizer.decode(buffer);
       // The token may represent an incomplete unicode char.
       if (text.endsWith('\u{FFFD}'))
         continue;
+      // Trim left whitespace for the first output.
+      if (this.tokenizer.trimLeft && count == 1)
+        text = text.trimLeft();
       yield text;
       buffer = [];
     }
