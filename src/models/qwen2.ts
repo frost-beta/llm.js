@@ -1,5 +1,6 @@
 import {core as mx, nn} from '@frost-beta/mlx';
-import {BaseModel, BaseKVCache, baseModelArgs, createAttentionMask} from '../llm.js';
+import {BaseModel, baseModelArgs, createAttentionMask} from '../base.js';
+import {BaseKVCache} from '../kv-cache.js';
 
 interface ModelArgs {
   modelType: 'qwen2';

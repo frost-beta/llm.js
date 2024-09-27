@@ -1,8 +1,8 @@
 {
   "name": "@frost-beta/llm",
   "version": "0.0.1-dev",
-  "main": "dist/llm.js",
-  "types": "dist/llm.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
     "llm-chat": "dist/chat.js",
     "llm-generate": "dist/generate.js"

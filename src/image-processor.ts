@@ -1,5 +1,7 @@
 import sharp from 'sharp';
 import {core as mx} from '@frost-beta/mlx';
+import {baseModelArgs} from './base.js';
+import {readJsonSync} from './fs.js';
 
 export type ImageInputType = Buffer | ArrayBuffer | string;
 
@@ -21,10 +23,13 @@ export interface ProcessedImage {
 }
 
 export class ImageProcessor {
+  config: PreprocessorConfig;
   cropSize: {width: number, height: number};
   shortestEdge: number;
 
-  constructor(private config: PreprocessorConfig) {
+  constructor(dir: string) {
+    const json = readJsonSync(`${dir}/preprocessor_config.json`);
+    const config = this.config = baseModelArgs(json) as PreprocessorConfig;
     if (!config.cropSize || !config.size)
       throw new Error('"crop_size" and "size" are required.');
     // The config.crop_size can be a number or an object.

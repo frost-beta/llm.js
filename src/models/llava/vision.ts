@@ -1,5 +1,5 @@
 import {core as mx, nn} from '@frost-beta/mlx';
-import {baseModelArgs} from '../../llm.js';
+import {baseModelArgs} from '../../base.js';
 
 export interface VisionConfig {
   modelType: 'clip_vision_model';

@@ -1,5 +1,5 @@
 import {core as mx, nn} from '@frost-beta/mlx';
-import type {BaseModel} from './llm.js';
+import type {BaseModel} from './base.js';
 
 /**
  * The base class of KV cache.

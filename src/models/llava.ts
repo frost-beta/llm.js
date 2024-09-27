@@ -1,5 +1,6 @@
 import {core as mx, nn} from '@frost-beta/mlx';
-import {BaseModel, BaseKVCache, baseModelArgs} from '../llm.js';
+import {BaseModel, baseModelArgs} from '../base.js';
+import {BaseKVCache} from '../kv-cache.js';
 import {VisionConfig, VisionModel} from './llava/vision.js';
 import * as llama from './llama.js';
 

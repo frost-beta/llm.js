@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import {ImageProcessor, Tokenizer, loadModel, step} from './llm.js';
+import {loadLLM} from './llm.js';
 
 let maxTokens = 512;
 const argv = process.argv.slice(2).filter((arg) => {
@@ -19,37 +19,20 @@ if (argv.length < 1) {
 main(argv[0], argv[1]);
 
 async function main(dir: string, prompt?: string) {
-  const tokenizer = new Tokenizer(dir);
-  const model = await loadModel(dir);
-
-  let imageProcessor: ImageProcessor | undefined;
-  if (model.imagePlaceholder)
-    imageProcessor = new ImageProcessor(dir);
-
-  if (prompt)
-    process.stdout.write(prompt);
+  const llm = await loadLLM(dir);
 
   // Encode prompt or just use BOS.
-  const {bosToken, eosToken} = tokenizer;
-  let promptTokens = prompt ? tokenizer.encode(prompt) : [ bosToken ];
+  const {bosToken, eosToken} = llm.tokenizer;
+  let promptTokens = prompt ? llm.tokenizer.encode(prompt) : [ bosToken ];
   // Some tokenizers append EOS to the encoded text, remove it otherwise the
   // generation might stop there.
   if (promptTokens.length > 1 && promptTokens.at(-1) === eosToken)
     promptTokens = promptTokens.slice(0, -1);
 
   // Generation.
-  let tokens: number[] = [];
-  let count = 0;
-  for await (const [ token ] of step(promptTokens, model, eosToken)) {
-    if (++count > maxTokens)
-      break;
-    tokens.push(token);
-    const char = tokenizer.decode(tokens);
-    // The token may represent an incomplete unicode char.
-    if (char.endsWith('\u{FFFD}'))
-      continue;
-    process.stdout.write(char);
-    tokens = [];
-  }
+  if (prompt)
+    process.stdout.write(prompt);
+  for await (const text of llm.generate(promptTokens, {maxTokens}))
+    process.stdout.write(text);
   process.stdout.write('\n');
 }
