@@ -72,6 +72,7 @@ export class LLM {
    * Convert the messages to embeddings, with images parsed.
    */
   async applyChatTemplate(messages: Message[], options?: ChatTemplateOptions) {
+    // Receive the images in all the messages.
     let pixelEmbedsList: mx.array[] = [];
     for (const message of messages) {
       const [ text, pixelEmbeds ] = await this.parseImagesInText(message.content);
@@ -80,9 +81,10 @@ export class LLM {
         pixelEmbedsList.push(pixelEmbeds);
       }
     }
+    // Create embeddings for the messages and the images.
+    const tokens = this.tokenizer.applyChatTemplate(messages, options);
     const pixelEmbeds = pixelEmbedsList.length > 0 ? mx.concatenate(pixelEmbedsList, 0)
                                                    : undefined;
-    const tokens = this.tokenizer.applyChatTemplate(messages, options);
     const embeddings = this.tokensToEmbeddings(tokens, pixelEmbeds);
     mx.dispose(pixelEmbeds);
     mx.dispose(pixelEmbedsList);
