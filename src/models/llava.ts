@@ -63,44 +63,36 @@ export class Model extends BaseModel {
   visionTower: VisionModel;
   languageModel: llama.Model;
   multiModalProjector: LlavaMultiModalProjector;
-  imageTokenIndex: number;
   visionFeatureLayer: number;
   visionFeatureSelectStrategy: string;
 
   constructor(args: ModelArgs) {
     super();
     args = modelArgs(args);
+    this.imagePlaceholder = '<image>';
+    this.imageToken = args.imageTokenIndex;
     this.visionTower = new VisionModel(args.visionConfig);
     this.languageModel = new llama.Model(args.textConfig);
     this.multiModalProjector = new LlavaMultiModalProjector(args);
-    this.imageTokenIndex = args.imageTokenIndex;
     this.visionFeatureLayer = args.visionFeatureLayer;
     this.visionFeatureSelectStrategy = args.visionFeatureSelectStrategy;
   }
 
-  getInputEmbeddings(inputIds?: mx.array, pixelValues?: mx.array) {
-    // Get the input embeddings from the language model.
-    const inputsEmbeds = this.languageModel.model.embedTokens.forward(inputIds);
-    if (!pixelValues)
-      return inputsEmbeds;
-
+  override computePixelEmbeddings(pixels: mx.array): mx.array {
     // Get the ouptut hidden states from the vision model.
-    const [ , , hiddenStates ] = this.visionTower.forward(pixelValues.transpose(0, 2, 3, 1), true);
+    const [ , , hiddenStates ] = this.visionTower.forward(pixels.transpose(0, 2, 3, 1), true);
 
     // Select the hidden states from the desired layer.
-    let selectedImageFeature = hiddenStates[this.visionFeatureLayer];
+    let imageFeatures = hiddenStates[this.visionFeatureLayer];
     if (this.visionFeatureSelectStrategy == 'default')
-      selectedImageFeature = selectedImageFeature.index(mx.Slice(), mx.Slice(1));
+      imageFeatures = imageFeatures.index(mx.Slice(), mx.Slice(1));
     else if (this.visionFeatureSelectStrategy == 'full')
-      selectedImageFeature = selectedImageFeature;
+      imageFeatures = imageFeatures;
     else
       throw new Error(`Unexpected feature selection strategy: ${this.visionFeatureSelectStrategy}`);
 
     // Pass image features through the multi-modal projector.
-    const imageFeatures = this.multiModalProjector.forward(selectedImageFeature);
-
-    // Insert special image tokens in the inputIds
-    return this.mergeInputIdsWithImageFeatures(imageFeatures, inputsEmbeds, inputIds);
+    return this.multiModalProjector.forward(imageFeatures);
   }
 
   override computeTextEmbeddings(inputs: mx.array): mx.array {
@@ -109,11 +101,6 @@ export class Model extends BaseModel {
 
   override forwardEmbeddings(embeddings: mx.array, cache?: BaseKVCache[]): mx.array {
     return this.languageModel.forwardEmbeddings(embeddings, cache);
-  }
-
-  override forwardWithPixels(inputIds: mx.array, pixelValues: mx.array, cache?: BaseKVCache[]) {
-    const embeddings = this.getInputEmbeddings(inputIds, pixelValues);
-    return this.forwardEmbeddings(embeddings, cache);
   }
 
   override sanitize(weights: Record<string, mx.array>) {
@@ -153,7 +140,7 @@ export class Model extends BaseModel {
     const imagePositions: number[] = [];
     const inputs = inputIds.index(0).tolist() as number[];
     for (let i = 0; i < inputs.length; ++i) {
-      if (inputs[i] == this.imageTokenIndex)
+      if (inputs[i] == this.imageToken)
         imagePositions.push(i);
     }
 

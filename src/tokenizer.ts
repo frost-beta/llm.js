@@ -1,5 +1,7 @@
+import {fileURLToPath} from 'node:url';
 import {TokenizerLoader} from '@lenml/tokenizers';
 import {readJsonSync} from './fs.js';
+import type {BaseModel} from './llm.js';
 
 /**
  * A message in chat models.
@@ -70,4 +72,18 @@ export class Tokenizer {
       return tokens.slice(this.systemPromptLength);
     return tokens;
   }
+}
+
+/**
+ * Find out all the <image: path> tags in the text and replace with placeholders
+ * of the model.
+ */
+export async function parseImagesInText(text: string,
+                                        model: BaseModel,
+                                        imageProcessor: ImageProcessor) {
+  const paths: string[] = [];
+  text = text.replace(/<image: (.*?)>/g, (match) => {
+    paths.push(match.slice(8, -1));
+    return model.imagePlaceholder;
+  });
 }

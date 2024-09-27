@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import {Tokenizer, loadModel, step} from './llm.js';
+import {ImageProcessor, Tokenizer, loadModel, step} from './llm.js';
 
 let maxTokens = 512;
 const argv = process.argv.slice(2).filter((arg) => {
@@ -18,9 +18,13 @@ if (argv.length < 1) {
 
 main(argv[0], argv[1]);
 
-async function main(dir: string, prompt: string) {
+async function main(dir: string, prompt?: string) {
   const tokenizer = new Tokenizer(dir);
   const model = await loadModel(dir);
+
+  let imageProcessor: ImageProcessor | undefined;
+  if (model.imagePlaceholder)
+    imageProcessor = new ImageProcessor(dir);
 
   if (prompt)
     process.stdout.write(prompt);
