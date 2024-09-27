@@ -19,13 +19,13 @@ jobs:
           yarn prepack
 
           huggingface download --silent mlx-community/Meta-Llama-3-8B-Instruct-4bit
-          echo Hello | yarn tsx src/chat.ts Meta-Llama-3-8B-Instruct-4bit
+          echo 'Hello' | yarn tsx src/chat.ts Meta-Llama-3-8B-Instruct-4bit
 
           huggingface download --silent Qwen/Qwen2-0.5B
           yarn tsx src/generate.ts --max-tokens=128 Qwen2-0.5B
 
           huggingface download --silent mlx-community/llava-1.5-7b-4bit
-          yarn tsx src/generate.ts --max-tokens=128 llava-1.5-7b-4bit 'USER: How are you?\nASSISTANT:'
+          echo 'What is in the photo? <image:https://www.techno-edge.net/imgs/zoom/19711.jpg>' | yarn tsx src/chat.ts llava-1.5-7b-4bit --temperature=0
 
   publish:
     if: startsWith(github.ref, 'refs/tags/')

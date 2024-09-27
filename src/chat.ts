@@ -23,7 +23,7 @@ async function main(dir: string) {
   // Whether to use colors output.
   let youPrompt = 'You> ';
   let botPrompt = 'Assistant> ';
-  if (process.stdout.hasColors()) {
+  if (process.stdout.isTTY && process.stdout.hasColors()) {
     youPrompt = styleText('green', youPrompt);
     botPrompt = styleText('blue', botPrompt);
   }
@@ -34,7 +34,7 @@ async function main(dir: string) {
     output: process.stdout,
   });
   rl.once('close', () => process.stdout.write('\n'));
-  while (true) {
+  while (!(rl as any).input.closed) {
     const question = await rl.question(youPrompt);
     messages.push({role: 'user', content: question});
     process.stdout.write(botPrompt);
