@@ -14,6 +14,7 @@ export interface RopeScaling {
 export interface ModelArgs {
   modelType: 'llama';
   attentionBias: boolean;
+  attentionOutProjectionBias: boolean;
   headDim?: number;
   hiddenSize: number;
   intermediateSize: number;
@@ -38,6 +39,9 @@ export function modelArgs(json: any): ModelArgs {
     ropeTraditional: false,
     tieWordEmbeddings: true,
   }, baseModelArgs(json));
+  if (args.attentionOutProjectionBias == undefined) {
+    args.attentionOutProjectionBias = args.attentionBias;
+  }
   if (!args.numKeyValueHeads) {
     args.numKeyValueHeads = args.numAttentionHeads;
   }
@@ -151,7 +155,7 @@ class Attention extends nn.Module {
     this.qProj = new nn.Linear(dim, this.nHeads * headDim, args.attentionBias);
     this.kProj = new nn.Linear(dim, this.nKVHeads * headDim, args.attentionBias);
     this.vProj = new nn.Linear(dim, this.nKVHeads * headDim, args.attentionBias);
-    this.oProj = new nn.Linear(this.nHeads * headDim, dim, args.attentionBias);
+    this.oProj = new nn.Linear(this.nHeads * headDim, dim, args.attentionOutProjectionBias);
 
     this.rope = initializeRoPE(args);
   }
