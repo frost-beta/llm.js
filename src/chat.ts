@@ -28,17 +28,17 @@ async function main(dir: string) {
     const question = await rl.question('You> ')
     messages.push({role: 'user', content: question});
     process.stdout.write('Assistant> ');
-    const reply = await talk(llm, messages.slice(-1), messages.length == 1);
+    const reply = await talk(llm, messages.at(-1), messages.length == 1);
     messages.push({role: 'assistant', content: reply});
   }
 }
 
 // Send full messages history to model and get response.
-async function talk(llm: LLM, messages: Message[], firstMessage: boolean) {
+async function talk(llm: LLM, message: Message, firstMessage: boolean) {
   // Translate the messages to tokens.
   // Note that some chat templates add a system prompt automatically and we need
   // to trim it when generating tokens for only new messages.
-  const promptTokens = llm.tokenizer.applyChatTemplate(messages, {trimSystemPrompt: !firstMessage});
+  const promptTokens = llm.tokenizer.applyChatTemplate([ message ], {trimSystemPrompt: !firstMessage});
 
   const promptTensor = mx.array(promptTokens, mx.int32).index(mx.newaxis);
   const promptEmbeds = llm.model.computeTextEmbeddings(promptTensor);

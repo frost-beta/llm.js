@@ -41,7 +41,7 @@ class Attention extends nn.Module {
     const [  , S,   ] = keys.shape;
 
     queries = queries.reshape(B, L, this.numHeads, -1).transpose(0, 2, 1, 3);
-    keys = keys.reshape(B, S, this.numHeads, -1).transpose(0, 2, 1, 3);
+    keys = keys.reshape(B, S, this.numHeads, -1).transpose(0, 2, 3, 1);
     values = values.reshape(B, S, this.numHeads, -1).transpose(0, 2, 1, 3);
 
     const scale = Math.sqrt(1 / queries.shape.at(-1));
@@ -125,6 +125,8 @@ class VisionEmbeddings extends nn.Module {
   numPositions: number;
   positionEmbedding: nn.Embedding;
 
+  #positionIds: mx.array;
+
   constructor(config: VisionConfig) {
     super();
     this.embedDim = config.hiddenSize;
@@ -144,6 +146,8 @@ class VisionEmbeddings extends nn.Module {
     this.numPatches = (this.imageSize / this.patchSize) ** 2;
     this.numPositions = this.numPatches + 1;
     this.positionEmbedding = new nn.Embedding(this.numPositions, this.embedDim);
+
+    this.#positionIds = mx.arange(this.numPositions, mx.int32).index(mx.newaxis);
   }
 
   forward(x: mx.array) {
@@ -153,7 +157,7 @@ class VisionEmbeddings extends nn.Module {
     const embedDim = patchEmbeddings.shape.at(-1);
     const clsEmbeddings = mx.broadcastTo(this.classEmbedding, [ batchSize, 1, embedDim ]);
     let embeddings = mx.concatenate([ clsEmbeddings, patchEmbeddings ], 1);
-    embeddings = mx.add(embeddings, this.positionEmbedding.weight);
+    embeddings = mx.add(embeddings, this.positionEmbedding.forward(this.#positionIds));
     return embeddings;
   }
 }

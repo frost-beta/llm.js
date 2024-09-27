@@ -21,19 +21,8 @@ main(argv[0], argv[1]);
 
 async function main(dir: string, prompt?: string) {
   const llm = await loadLLM(dir);
+  const promptEmbeds = await llm.encode(prompt);
 
-  // Encode prompt or just use BOS.
-  const {bosToken, eosToken} = llm.tokenizer;
-  let promptTokens = prompt ? llm.tokenizer.encode(prompt) : [ bosToken ];
-  // Some tokenizers append EOS to the encoded text, remove it otherwise the
-  // generation might stop there.
-  if (promptTokens.length > 1 && promptTokens.at(-1) === eosToken)
-    promptTokens = promptTokens.slice(0, -1);
-
-  const promptTensor = mx.array(promptTokens, mx.int32).index(mx.newaxis);
-  const promptEmbeds = llm.model.computeTextEmbeddings(promptTensor);
-
-  // Generation.
   if (prompt)
     process.stdout.write(prompt);
   for await (const text of llm.generate(promptEmbeds, {maxTokens}))

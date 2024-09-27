@@ -1,4 +1,3 @@
-import {fileURLToPath} from 'node:url';
 import {TokenizerLoader} from '@lenml/tokenizers';
 import {readJsonSync} from './fs.js';
 

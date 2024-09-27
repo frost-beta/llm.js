@@ -77,7 +77,7 @@ export abstract class BaseModel extends nn.Module {
     // Concatenate them together.
     const segments: mx.array[] = [];
     for (let i = 0; i < inputEmbedsSegments.length; ++i) {
-      segments.push(inputEmbedsSegments[i], pixelEmbeds.index(i));
+      segments.push(inputEmbedsSegments[i], pixelEmbeds.index(i).index(mx.newaxis));
     }
     segments.push(inputEmbeds.index(mx.Slice(), mx.Slice(startIdx)));
     return mx.concatenate(segments, 1);

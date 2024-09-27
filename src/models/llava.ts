@@ -81,10 +81,10 @@ export class Model extends BaseModel {
 
   override computePixelEmbeddings(pixels: mx.array): mx.array {
     // Get the ouptut hidden states from the vision model.
-    const [ , , hiddenStates ] = this.visionTower.forward(pixels.transpose(0, 2, 3, 1), true);
+    const [ , , hiddenStates ] = this.visionTower.forward(pixels, true);
 
     // Select the hidden states from the desired layer.
-    let imageFeatures = hiddenStates[this.visionFeatureLayer];
+    let imageFeatures = hiddenStates.at(this.visionFeatureLayer);
     if (this.visionFeatureSelectStrategy == 'default')
       imageFeatures = imageFeatures.index(mx.Slice(), mx.Slice(1));
     else if (this.visionFeatureSelectStrategy == 'full')
@@ -106,9 +106,6 @@ export class Model extends BaseModel {
 
   override sanitize(weights: Record<string, mx.array>) {
     for (const key in weights) {
-      // Remove unused position_ids.
-      if (key.includes('position_ids'))
-        continue;
       // PyTorch Conv2d expects the weight tensor to be of shape:
       // [out_channels, in_channels, kH, KW]
       // MLX Conv2d expects the weight tensor to be of shape:
@@ -132,40 +129,5 @@ export class Model extends BaseModel {
 
   override get nKVHeads() {
     return this.languageModel.nKVHeads;
-  }
-
-  private mergeInputIdsWithImageFeatures(imageFeatures: mx.array, inputsEmbeds: mx.array, inputIds: mx.array) {
-    const [ numImages, numImagePatches, embedDim ] = imageFeatures.shape;
-
-    // Positions of <image> tokens in inputIds, assuming batch size is 1.
-    const imagePositions: number[] = [];
-    const inputs = inputIds.index(0).tolist() as number[];
-    for (let i = 0; i < inputs.length; ++i) {
-      if (inputs[i] == this.imageToken)
-        imagePositions.push(i);
-    }
-
-    if (imagePositions.length !== numImages) {
-      throw new Error(`The number of image tokens (${imagePositions.length}) does not match the number of image inputs (${numImages}).`);
-    }
-
-    const textSegments: mx.array[] = [];
-    let startIdx = 0;
-
-    for (const position of imagePositions) {
-      textSegments.push(inputsEmbeds.index(mx.Slice(), mx.Slice(startIdx, position)));
-      startIdx = position + 1;
-    }
-
-    const imageEmbeddings = mx.split(imageFeatures, numImages);
-    const finalEmbeddings: mx.array[] = [];
-    for (let i = 0; i < textSegments.length; ++i) {
-      finalEmbeddings.push(textSegments[i], imageEmbeddings[i]);
-    }
-    finalEmbeddings.push(inputsEmbeds.index(mx.Slice(), mx.Slice(startIdx)));
-
-    // Create a final embedding of shape
-    // (1, numImagePatches * numImages + sequenceLen, embedDim)
-    return mx.concatenate(finalEmbeddings, 1);
   }
 }
