@@ -1,7 +1,7 @@
 import {fileURLToPath} from 'node:url';
 import {core as mx} from '@frost-beta/mlx';
 import {BaseModel, StepOptions, loadModel, step} from './base.js';
-import {Tokenizer} from './tokenizer.js';
+import {ChatTemplateOptions, Message, Tokenizer} from './tokenizer.js';
 import {ImageInputType, ImageProcessor} from './image-processor.js';
 
 /**
@@ -31,7 +31,7 @@ export function parseArgs(args: string[]): [ string[], LLMGenerateOptions ] {
     }
     return true;
   });
-  return [ args, options ];
+  return [ args.map(unescapeBackslashes), options ];
 }
 
 /**
@@ -60,12 +60,30 @@ export class LLM {
     } else {
       tokens = [ this.tokenizer.bosToken ];
     }
-    // Tokens to embeddings.
-    const inputs = mx.array(tokens, mx.int32).index(mx.newaxis);
-    const inputEmbeds = this.model.computeTextEmbeddings(inputs);
-    if (!pixelEmbeds)
-      return inputEmbeds;
-    return this.model.mergeTextPixelEmbeddings(inputs, inputEmbeds, pixelEmbeds);
+    const embeddings = this.tokensToEmbeddings(tokens, pixelEmbeds);
+    mx.dispose(pixelEmbeds);
+    return embeddings;
+  }
+
+  /**
+   * Convert the messages to embeddings, with images parsed.
+   */
+  async applyChatTemplate(messages: Message[], options?: ChatTemplateOptions) {
+    let pixelEmbedsList: mx.array[] = [];
+    for (const message of messages) {
+      const [ text, pixelEmbeds ] = await this.parseImagesInText(message.content);
+      if (pixelEmbeds) {
+        message.content = text;
+        pixelEmbedsList.push(pixelEmbeds);
+      }
+    }
+    const pixelEmbeds = pixelEmbedsList.length > 0 ? mx.concatenate(pixelEmbedsList, 0)
+                                                   : undefined;
+    const tokens = this.tokenizer.applyChatTemplate(messages, options);
+    const embeddings = this.tokensToEmbeddings(tokens, pixelEmbeds);
+    mx.dispose(pixelEmbeds);
+    mx.dispose(pixelEmbedsList);
+    return embeddings;
   }
 
   /**
@@ -92,7 +110,7 @@ export class LLM {
    * Find out all the <image: path> tags in the text and replace them with
    * placeholders of the model.
    */
-  async parseImagesInText(text: string): Promise<[ string, mx.array | undefined ]> {
+  private async parseImagesInText(text: string): Promise<[ string, mx.array | undefined ]> {
     if (!this.imageProcessor)
       return [ text, undefined ];
     // Find out the tags and replace them.
@@ -106,8 +124,23 @@ export class LLM {
     // Read and process the images.
     const inputs = await Promise.all(paths.map(fetchImage));
     const images = await this.imageProcessor.processImages(inputs);
-    const pixels = this.imageProcessor.normalizeImages(images);
-    return [ text, this.model.computePixelEmbeddings(pixels) ];
+    return mx.tidy(() => {
+      const pixels = this.imageProcessor.normalizeImages(images);
+      return [ text, this.model.computePixelEmbeddings(pixels) ];
+    });
+  }
+
+  /**
+   * Convert tokens and images to embeddings.
+   */
+  private tokensToEmbeddings(tokens: number[], pixelEmbeds?: mx.array) {
+    return mx.tidy(() => {
+      const inputs = mx.array(tokens, mx.int32).index(mx.newaxis);
+      const inputEmbeds = this.model.computeTextEmbeddings(inputs);
+      if (!pixelEmbeds)
+        return inputEmbeds;
+      return this.model.mergeTextPixelEmbeddings(inputs, inputEmbeds, pixelEmbeds);
+    });
   }
 }
 
@@ -121,9 +154,7 @@ export async function loadLLM(dir: string) {
                  model.imagePlaceholder ? new ImageProcessor(dir) : undefined);
 }
 
-/**
- * Get image from the path.
- */
+// Get image from the path.
 async function fetchImage(path: string): Promise<ImageInputType> {
   try {
     // Parse url path.
@@ -142,4 +173,20 @@ async function fetchImage(path: string): Promise<ImageInputType> {
       throw new Error(`Can not get image from the query URL: ${error.message}`);
     }
   }
+}
+
+// Unescape backslashes in string.
+function unescapeBackslashes(str: string): string {
+  return str.replace(/\\(.)/g, function(_, escapeChar) {
+    switch (escapeChar) {
+      case 'n':
+        return '\n';
+      case 'r':
+        return '\r';
+      case 't':
+        return '\t';
+      default:
+        return escapeChar;
+    }
+  });
 }

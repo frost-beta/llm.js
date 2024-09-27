@@ -39,14 +39,11 @@ async function talk(llm: LLM, message: Message, firstMessage: boolean) {
   // Translate the messages to tokens.
   // Note that some chat templates add a system prompt automatically and we need
   // to trim it when generating tokens for only new messages.
-  const promptTokens = llm.tokenizer.applyChatTemplate([ message ], {trimSystemPrompt: !firstMessage});
-
-  const promptTensor = mx.array(promptTokens, mx.int32).index(mx.newaxis);
-  const promptEmbeds = llm.model.computeTextEmbeddings(promptTensor);
+  const promptEmbeds = await llm.applyChatTemplate([ message ], {trimSystemPrompt: !firstMessage});
 
   // Predict next tokens.
   let result = '';
-  for await (const text of llm.generate(promptEmbeds)) {
+  for await (const text of llm.generate(promptEmbeds, options)) {
     result += text;
     process.stdout.write(text);
   }
@@ -58,6 +55,8 @@ async function talk(llm: LLM, message: Message, firstMessage: boolean) {
                 `JS Objects ${mx.getWrappersCount()}.`);
   }
 
+  // Cleanup.
+  mx.dispose(promptEmbeds);
   if (mx.metal.isAvailable()) {
     // After a conversation, we know it will take a while before next input and
     // it is good chance to just release all the memory cache.

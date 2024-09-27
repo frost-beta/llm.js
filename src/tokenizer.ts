@@ -26,10 +26,21 @@ export class Tokenizer {
   private systemPromptLength?: number;
 
   constructor(dir: string) {
-    this.tokenizer = TokenizerLoader.fromPreTrained({
-      tokenizerJSON: readJsonSync(`${dir}/tokenizer.json`),
-      tokenizerConfig: readJsonSync(`${dir}/tokenizer_config.json`),
-    });
+    const tokenizerConfig = readJsonSync(`${dir}/tokenizer_config.json`);
+    // Provide a default chat template for llava 1.5.
+    if (!tokenizerConfig.chat_template && tokenizerConfig.processor_class == 'LlavaProcessor') {
+      tokenizerConfig.chat_template =
+        `{%- for message in messages %}
+            {{- message['role'].upper() + ': ' }}
+            {{- message['content'] + '\n' }}
+         {%- endfor %}
+         {%- if add_generation_prompt %}
+             {{- 'ASSISTANT:' }}
+         {%- endif %}`;
+    }
+    // Create tokenizer.
+    const tokenizerJSON = readJsonSync(`${dir}/tokenizer.json`);
+    this.tokenizer = TokenizerLoader.fromPreTrained({tokenizerJSON, tokenizerConfig});
     // Do not strip the heading whitespace as it breaks streaming.
     const {decoders} = this.tokenizer.decoder as any;
     if (decoders?.at(-1)?.config?.type == 'Strip')
