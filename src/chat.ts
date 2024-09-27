@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import readline from 'node:readline/promises';
+import {styleText} from 'node:util';
 import {core as mx} from '@frost-beta/mlx';
 import {LLM, parseArgs, loadLLM} from './llm.js';
 import {Message} from './tokenizer.js';
@@ -19,6 +20,14 @@ async function main(dir: string) {
   // Records the messages.
   const messages: Message[] = [];
 
+  // Whether to use colors output.
+  let youPrompt = 'You> ';
+  let botPrompt = 'Assistant> ';
+  if (process.stdout.hasColors()) {
+    youPrompt = styleText('green', youPrompt);
+    botPrompt = styleText('blue', botPrompt);
+  }
+
   // Chat interface.
   const rl = readline.createInterface({
     input: process.stdin,
@@ -26,9 +35,9 @@ async function main(dir: string) {
   });
   rl.once('close', () => process.stdout.write('\n'));
   while (true) {
-    const question = await rl.question('You> ')
+    const question = await rl.question(youPrompt);
     messages.push({role: 'user', content: question});
-    process.stdout.write('Assistant> ');
+    process.stdout.write(botPrompt);
     const reply = await talk(llm, messages.at(-1), messages.length == 1);
     messages.push({role: 'assistant', content: reply});
   }
@@ -37,9 +46,11 @@ async function main(dir: string) {
 // Send full messages history to model and get response.
 async function talk(llm: LLM, message: Message, firstMessage: boolean) {
   // Translate the messages to tokens.
-  // Note that some chat templates add a system prompt automatically and we need
-  // to trim it when generating tokens for only new messages.
-  const promptEmbeds = await llm.applyChatTemplate([ message ], {trimSystemPrompt: !firstMessage});
+  const promptEmbeds = await llm.applyChatTemplate([ message ], {
+    // Some chat templates add a system prompt automatically and we need to trim
+    // it when generating tokens for only new messages.
+    trimSystemPrompt: !firstMessage,
+  });
 
   // Predict next tokens.
   let result = '';
