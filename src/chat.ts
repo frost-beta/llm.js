@@ -34,7 +34,7 @@ async function main(dir: string) {
     output: process.stdout,
   });
   rl.once('close', () => process.stdout.write('\n'));
-  while (!(rl as any).input.closed) {
+  while (!process.stdin.closed) {
     const question = await rl.question(youPrompt);
     messages.push({role: 'user', content: question});
     process.stdout.write(botPrompt);
