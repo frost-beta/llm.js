@@ -25,7 +25,7 @@
     "typescript": "5.6.2"
   },
   "dependencies": {
-    "@frost-beta/mlx": "0.0.20",
+    "@frost-beta/mlx": "0.0.22",
     "@lenml/tokenizers": "1.1.2",
     "sharp": "0.33.5"
   }

@@ -173,7 +173,6 @@ export async function loadModel(dir: string): Promise<BaseModel> {
 
   // Load weights.
   model.loadWeights(Object.entries(weights));
-  mx.eval(model.parameters());
   return model;
 }
 
@@ -201,9 +200,10 @@ export async function* step(promptEmbeds: mx.array,
   const cache = kvCache ?? RotatingKVCache.createForModel(model);
 
   // Sample the logits results.
-  const predict = (logits: mx.array) => {
+  const predict = async (logits: mx.array) => {
     logits = logits.index(mx.Slice(), -1);
     const [ token ] = sample(logits, topP, temperature);
+    await mx.asyncEval(token);
     return token.item() as number;
   };
 
@@ -213,7 +213,7 @@ export async function* step(promptEmbeds: mx.array,
   const prefillStepSize = 512;
   const embeddingsSize = promptEmbeds.shape[1];
   for (let offset = 0; offset < embeddingsSize;) {
-    mx.tidy(() => {
+    await mx.tidy(async () => {
       const size = Math.min(prefillStepSize, embeddingsSize - offset);
       const chunk = promptEmbeds.index(mx.Slice(), mx.Slice(offset, offset + size));
       const logits = model.forwardEmbeddings(chunk, cache);
@@ -221,7 +221,7 @@ export async function* step(promptEmbeds: mx.array,
       offset += size;
       // Do token-by-token generation after prompt is consumed.
       if (offset == embeddingsSize)
-        nextToken = predict(logits);
+        nextToken = await predict(logits);
       // Keep the cache from being released.
       return cache;
     });
@@ -231,14 +231,12 @@ export async function* step(promptEmbeds: mx.array,
     // Quit after getting EOS.
     if (nextToken == eosToken)
       break;
-    // Yield the result in the next tick of loop, so GC can get a chance to run.
-    await new Promise(resolve => process.nextTick(resolve));
     yield nextToken;
     // Forward the token to model and free intermediate tensors.
-    [ nextToken ] = mx.tidy(() => {
+    [ nextToken ] = await mx.tidy(async () => {
       const logits = model.forward(mx.array([ [ nextToken ] ], mx.int32), cache);
       // The cache is also returned so it does not get freed by mx.tidy().
-      return [ predict(logits), cache ];
+      return [ await predict(logits), cache ];
     });
   } while (true);
 
