@@ -180,6 +180,7 @@ export async function loadModel(dir: string): Promise<BaseModel> {
  * Options passed to step.
  */
 export interface StepOptions {
+  signal?: AbortSignal;
   kvCache?: BaseKVCache[];
   topP?: number;
   temperature?: number;
@@ -192,6 +193,7 @@ export async function* step(promptEmbeds: mx.array,
                             model: BaseModel,
                             eosToken: number,
                             {
+                              signal,
                               kvCache,
                               topP = 0.8,
                               temperature = 1,
@@ -209,10 +211,12 @@ export async function* step(promptEmbeds: mx.array,
 
   // Forward prompt by steps so we don't use too much RAM.
   // See also https://github.com/ml-explore/mlx-examples/pull/931
-  let nextToken: number;
+  let nextToken = eosToken;
   const prefillStepSize = 512;
   const embeddingsSize = promptEmbeds.shape[1];
   for (let offset = 0; offset < embeddingsSize;) {
+    if (signal?.aborted)
+      break;
     await mx.tidy(async () => {
       const size = Math.min(prefillStepSize, embeddingsSize - offset);
       const chunk = promptEmbeds.index(mx.Slice(), mx.Slice(offset, offset + size));
@@ -230,6 +234,9 @@ export async function* step(promptEmbeds: mx.array,
   do {
     // Quit after getting EOS.
     if (nextToken == eosToken)
+      break;
+    // The generation is aborted.
+    if (signal?.aborted)
       break;
     yield nextToken;
     // Forward the token to model and free intermediate tensors.

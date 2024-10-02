@@ -3,7 +3,7 @@
 import readline from 'node:readline/promises';
 import {styleText} from 'node:util';
 import {core as mx} from '@frost-beta/mlx';
-import {LLM, parseArgs, loadLLM} from './llm.js';
+import {LLMGenerateOptions, LLM, parseArgs, loadLLM} from './llm.js';
 import {Message} from './tokenizer.js';
 
 const [ argv, options ] = parseArgs(process.argv.slice(2));
@@ -12,9 +12,9 @@ if (argv.length < 1) {
   process.exit(0);
 }
 
-main(argv[0]);
+main(argv[0], options);
 
-async function main(dir: string) {
+async function main(dir: string, options: LLMGenerateOptions) {
   const llm = await loadLLM(dir);
 
   // Records the messages.
@@ -34,17 +34,29 @@ async function main(dir: string) {
     output: process.stdout,
   });
   rl.once('close', () => process.stdout.write('\n'));
+
+  // Chat loop.
   while (!process.stdin.closed) {
     const question = await rl.question(youPrompt);
     messages.push({role: 'user', content: question});
     process.stdout.write(botPrompt);
-    const reply = await talk(llm, messages.at(-1), messages.length == 1);
+    const reply = await talk(rl, llm, messages.at(-1), messages.length == 1, options);
     messages.push({role: 'assistant', content: reply});
   }
 }
 
 // Send full messages history to model and get response.
-async function talk(llm: LLM, message: Message, firstMessage: boolean) {
+async function talk(rl: readline.Interface,
+                    llm: LLM,
+                    message: Message,
+                    firstMessage: boolean,
+                    options: LLMGenerateOptions) {
+  // Interrupt generation when Ctrl-C is pressed.
+  const controller = new AbortController();
+  options.signal = controller.signal;
+  const abort = () => controller.abort();
+  rl.on('SIGINT', abort);
+
   // Translate the messages to tokens.
   const promptEmbeds = await llm.applyChatTemplate([ message ], {
     // Some chat templates add a system prompt automatically and we need to trim
@@ -73,5 +85,6 @@ async function talk(llm: LLM, message: Message, firstMessage: boolean) {
     // it is good chance to just release all the memory cache.
     mx.metal.clearCache();
   }
+  rl.removeListener('SIGINT', abort);
   return result;
 }
