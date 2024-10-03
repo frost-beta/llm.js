@@ -160,7 +160,7 @@ class Attention extends nn.Module {
     this.rope = initializeRoPE(args);
   }
 
-  forward(x: mx.array, mask: mx.array, cache: BaseKVCache) {
+  forward(x: mx.array, mask?: mx.array, cache?: BaseKVCache) {
     const [ B, L, D ] = x.shape;
 
     let queries = this.qProj.forward(x);
