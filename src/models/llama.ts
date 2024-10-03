@@ -261,9 +261,8 @@ export class Model extends BaseModel {
   lmHead: nn.Linear;
 
   constructor(json: any) {
-    const args = modelArgs(json);
     super();
-
+    const args = modelArgs(json);
     this.args = args;
     this.model = new LlamaModel(args);
     if (!args.tieWordEmbeddings)
@@ -274,7 +273,9 @@ export class Model extends BaseModel {
     return this.model.embedTokens.forward(inputs);
   }
 
-  override forwardEmbeddings(embeddings: mx.array, cache?: BaseKVCache[]): mx.array {
+  override decodeEmbeddings(embeddings: mx.array, memory?: mx.array, cache?: BaseKVCache[]): mx.array {
+    if (memory)
+      throw new Error('This model has no encoder.');
     const out = this.model.forward(embeddings, cache);
     if (this.args.tieWordEmbeddings)
       return this.model.embedTokens.asLinear(out);

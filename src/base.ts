@@ -7,6 +7,14 @@ import {loadWeights, readJsonSync} from './fs.js';
  */
 export abstract class BaseModel extends nn.Module {
   /**
+   * Whether this model has an encoder.
+   */
+  hasEncoder = false;
+  /**
+   * The token that used as the first token for decoder.
+   */
+  decoderStartToken?: number;
+  /**
    * The special token representing image, usually <image> or <|image|>.
    */
   imagePlaceholder?: string;
@@ -30,13 +38,20 @@ export abstract class BaseModel extends nn.Module {
   /**
    * Predict next token for the embeddings.
    */
-  abstract forwardEmbeddings(embeddings: mx.array, cache?: BaseKVCache[]): mx.array;
+  abstract decodeEmbeddings(embeddings: mx.array, memory?: mx.array, cache?: BaseKVCache[]): mx.array;
+
+  /**
+   * Pass the text embeddings to encoder and return memory.
+   */
+  encodeTextEmbeddings(embeddings: mx.array, cache?: BaseKVCache[]): mx.array {
+    throw new Error('This model has no encoder.');
+  }
 
   /**
    * Predict next token for the encoded text.
    */
-  override forward(inputs: mx.array, cache?: BaseKVCache[]): mx.array {
-    return this.forwardEmbeddings(this.computeTextEmbeddings(inputs), cache);
+  override forward(inputs: mx.array, memory?: mx.array, cache?: BaseKVCache[]): mx.array {
+    return this.decodeEmbeddings(this.computeTextEmbeddings(inputs), memory, cache);
   }
 
   /**
@@ -209,26 +224,34 @@ export async function* step(promptEmbeds: mx.array,
     return token.item() as number;
   };
 
-  // Forward prompt by steps so we don't use too much RAM.
-  // See also https://github.com/ml-explore/mlx-examples/pull/931
-  let nextToken = eosToken;
-  const prefillStepSize = 512;
-  const embeddingsSize = promptEmbeds.shape[1];
-  for (let offset = 0; offset < embeddingsSize;) {
-    if (signal?.aborted)
-      break;
-    await mx.tidy(async () => {
-      const size = Math.min(prefillStepSize, embeddingsSize - offset);
-      const chunk = promptEmbeds.index(mx.Slice(), mx.Slice(offset, offset + size));
-      const logits = model.forwardEmbeddings(chunk, cache);
-      mx.eval(cache.map(c => c.state));
-      offset += size;
-      // Do token-by-token generation after prompt is consumed.
-      if (offset == embeddingsSize)
-        nextToken = await predict(logits);
-      // Keep the cache from being released.
-      return cache;
-    });
+  // Handle prompt: for encoder-decoder models we pass it to encoder, fo
+  // decoder-only models we pass it to decoder directly.
+  let nextToken: number;
+  let memory: mx.array | undefined;
+  if (model.hasEncoder) {
+    nextToken = model.decoderStartToken;
+    memory = model.encodeTextEmbeddings(promptEmbeds);
+  } else {
+    // Forward prompt by steps so we don't use too much RAM.
+    // See also https://github.com/ml-explore/mlx-examples/pull/931
+    const prefillStepSize = 512;
+    const embeddingsSize = promptEmbeds.shape[1];
+    for (let offset = 0; offset < embeddingsSize;) {
+      if (signal?.aborted)
+        break;
+      await mx.tidy(async () => {
+        const size = Math.min(prefillStepSize, embeddingsSize - offset);
+        const chunk = promptEmbeds.index(mx.Slice(), mx.Slice(offset, offset + size));
+        const logits = model.decodeEmbeddings(chunk, undefined, cache);
+        mx.eval(cache.map(c => c.state));
+        offset += size;
+        // Do token-by-token generation after prompt is consumed.
+        if (offset == embeddingsSize)
+          nextToken = await predict(logits);
+        // Keep the cache from being released.
+        return cache;
+      });
+    }
   }
 
   do {
@@ -241,7 +264,7 @@ export async function* step(promptEmbeds: mx.array,
     yield nextToken;
     // Forward the token to model and free intermediate tensors.
     [ nextToken ] = await mx.tidy(async () => {
-      const logits = model.forward(mx.array([ [ nextToken ] ], mx.int32), cache);
+      const logits = model.forward(mx.array([ [ nextToken ] ], mx.int32), memory, cache);
       // The cache is also returned so it does not get freed by mx.tidy().
       return [ await predict(logits), cache ];
     });

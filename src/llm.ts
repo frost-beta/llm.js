@@ -58,7 +58,7 @@ export class LLM {
       tokens = this.tokenizer.encode(text);
       // Some tokenizers append EOS to the encoded text, remove it otherwise the
       // generation might stop there.
-      if (tokens.length > 1 && tokens.at(-1) == this.tokenizer.eosToken)
+      if (!this.model.hasEncoder && tokens.length > 1 && tokens.at(-1) == this.tokenizer.eosToken)
         tokens.pop();
     } else {
       tokens = [ this.tokenizer.bosToken ];
@@ -95,6 +95,7 @@ export class LLM {
    * Predict next tokens using the embeddings of prompt.
    */
   async *generate(promptEmbeds: mx.array, options: LLMGenerateOptions = {}) {
+    this.model.eval();
     // If not specified, create a shared cache between generations.
     if (!options.kvCache) {
       if (!this.kvCache)

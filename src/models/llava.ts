@@ -67,16 +67,18 @@ export class Model extends BaseModel {
   visionFeatureLayer: number;
   visionFeatureSelectStrategy: string;
 
-  constructor(args: ModelArgs) {
+  constructor(json: any) {
     super();
-    args = modelArgs(args);
-    this.imagePlaceholder = '<image>';
-    this.imageToken = args.imageTokenIndex;
+    const args = modelArgs(json);
     this.visionTower = new VisionModel(args.visionConfig);
     this.languageModel = new llama.Model(args.textConfig);
     this.multiModalProjector = new LlavaMultiModalProjector(args);
     this.visionFeatureLayer = args.visionFeatureLayer;
     this.visionFeatureSelectStrategy = args.visionFeatureSelectStrategy;
+
+    this.hasEncoder = this.languageModel.hasEncoder;
+    this.imagePlaceholder = '<image>';
+    this.imageToken = args.imageTokenIndex;
   }
 
   override computePixelEmbeddings(pixels: mx.array): mx.array {
@@ -100,8 +102,8 @@ export class Model extends BaseModel {
     return this.languageModel.computeTextEmbeddings(inputs);
   }
 
-  override forwardEmbeddings(embeddings: mx.array, cache?: BaseKVCache[]): mx.array {
-    return this.languageModel.forwardEmbeddings(embeddings, cache);
+  override decodeEmbeddings(embeddings: mx.array, memory?: mx.array, cache?: BaseKVCache[]): mx.array {
+    return this.languageModel.decodeEmbeddings(embeddings, memory, cache);
   }
 
   override sanitize(weights: Record<string, mx.array>) {
