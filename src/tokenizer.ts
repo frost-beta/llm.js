@@ -43,12 +43,7 @@ export class Tokenizer {
     // Create tokenizer.
     const tokenizerJSON = readJsonSync(`${dir}/tokenizer.json`);
     this.tokenizer = TokenizerLoader.fromPreTrained({tokenizerJSON, tokenizerConfig});
-    // Remove the strip decoder as it breaks streaming.
-    const {decoders} = this.tokenizer.decoder as any;
-    if (decoders?.at(-1)?.config?.type == 'Strip') {
-      this.trimLeft = true;
-      decoders.pop();
-    }
+    this.removeWhiteSpaceStripper();
     // Get EOS token.
     const {tokens_to_ids} = this.tokenizer.model;
     this.eosToken = tokens_to_ids.get(this.tokenizer.getToken('eos_token'));
@@ -84,5 +79,30 @@ export class Tokenizer {
     if (trimSystemPrompt)
       return tokens.slice(this.systemPromptLength);
     return tokens;
+  }
+
+  // Many tokenizer decoders strips the heading whitespaces for the output,
+  // which breaks our streaming output as whitespaces between tokens are lost.
+  private removeWhiteSpaceStripper() {
+    const decoder = this.tokenizer.decoder as any;
+    if (decoder.constructor.name == 'MetaspaceDecoder') {
+      if (decoder.prepend_scheme == 'always' && decoder.split == true) {
+        // Work around a bug of transformers.js:
+        // https://github.com/xenova/transformers.js/issues/959
+        decoder.addPrefixSpace = true;
+        delete decoder.prepend_scheme;
+        delete decoder.split;
+      }
+      if (decoder.addPrefixSpace) {
+        this.trimLeft = true;
+        decoder.addPrefixSpace = false;
+        return;
+      }
+    }
+    if (decoder.decoders?.at(-1)?.config?.type == 'Strip') {
+      this.trimLeft = true;
+      decoder.decoders.pop();
+      return;
+    }
   }
 }

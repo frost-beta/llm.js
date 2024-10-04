@@ -261,7 +261,9 @@ export async function* step(promptEmbeds: mx.array,
     // The generation is aborted.
     if (signal?.aborted)
       break;
-    yield nextToken;
+    // Do not yield token if it is the decoderStartToken.
+    if (!(model.hasEncoder && nextToken == model.decoderStartToken))
+      yield nextToken;
     // Forward the token to model and free intermediate tensors.
     [ nextToken ] = await mx.tidy(async () => {
       const logits = model.forward(mx.array([ [ nextToken ] ], mx.int32), memory, cache);
