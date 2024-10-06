@@ -46,9 +46,9 @@ export class Tokenizer {
     this.removeWhiteSpaceStripper();
     // Get EOS token.
     const {tokens_to_ids} = this.tokenizer.model;
-    this.eosToken = tokens_to_ids.get(this.tokenizer.getToken('eos_token'));
+    this.eosToken = tokens_to_ids.get(tokenizerConfig.eos_token);
     // Some models do not have a BOS token, they use EOS instead.
-    this.bosToken = tokens_to_ids.get(this.tokenizer.getToken('bos_token')) ?? this.eosToken;
+    this.bosToken = tokens_to_ids.get(tokenizerConfig.bos_token) ?? this.eosToken;
   }
 
   encode(text: string) {
@@ -67,15 +67,12 @@ export class Tokenizer {
       // Get the automatically inserted system prompt by passing empty messages.
       const systemPrompt = this.tokenizer.apply_chat_template([], {
         add_generation_prompt: false,
-        tools: null,
-      } as unknown) as number[];
+      }) as number[];
       this.systemPromptLength = systemPrompt.length;
     }
     const tokens = this.tokenizer.apply_chat_template(messages, {
       add_generation_prompt: true,
-      // https://github.com/xenova/transformers.js/issues/879
-      tools: null,
-    } as unknown) as number[];
+    }) as number[];
     if (trimSystemPrompt)
       return tokens.slice(this.systemPromptLength);
     return tokens;
