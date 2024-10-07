@@ -1,5 +1,5 @@
 import {core as mx, nn} from '@frost-beta/mlx';
-import {BaseKVCache, RotatingKVCache} from './kv-cache.js';
+import {KVCacheOptions, BaseKVCache, RotatingKVCache} from './kv-cache.js';
 import {loadWeights, readJsonSync} from './fs.js';
 
 /**
@@ -43,7 +43,7 @@ export abstract class BaseModel extends nn.Module {
   /**
    * Pass the text embeddings to encoder and return memory.
    */
-  encodeTextEmbeddings(embeddings: mx.array, cache?: BaseKVCache[]): mx.array {
+  encodeEmbeddings(embeddings: mx.array, cache?: BaseKVCache[]): mx.array {
     throw new Error('This model has no encoder.');
   }
 
@@ -98,10 +98,8 @@ export abstract class BaseModel extends nn.Module {
     return mx.concatenate(segments, 1);
   }
 
-  // Following properties are defined for internal KV cache use only.
-  abstract get layers(): nn.Module[];
-  abstract get headDim(): number;
-  abstract get nKVHeads(): number;
+  // Following methods are defined for internal KV cache use only.
+  abstract getDecoderKVCacheOptions(): KVCacheOptions;
 }
 
 /**
@@ -214,7 +212,7 @@ export async function* step(promptEmbeds: mx.array,
                               temperature = 1,
                             }: StepOptions = {}): AsyncGenerator<number, void> {
   // Create KV Cache if none is specified in options.
-  const cache = kvCache ?? RotatingKVCache.createForModel(model);
+  const cache = kvCache ?? RotatingKVCache.create(model.getDecoderKVCacheOptions());
 
   // Sample the logits results.
   const predict = async (logits: mx.array) => {
@@ -230,7 +228,7 @@ export async function* step(promptEmbeds: mx.array,
   let memory: mx.array | undefined;
   if (model.hasEncoder) {
     nextToken = model.decoderStartToken;
-    memory = model.encodeTextEmbeddings(promptEmbeds);
+    memory = model.encodeEmbeddings(promptEmbeds);
   } else {
     // Forward prompt by steps so we don't use too much RAM.
     // See also https://github.com/ml-explore/mlx-examples/pull/931

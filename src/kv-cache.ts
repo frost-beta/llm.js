@@ -1,5 +1,10 @@
 import {core as mx, nn} from '@frost-beta/mlx';
-import type {BaseModel} from './base.js';
+
+export interface KVCacheOptions {
+  nLayers: number;
+  headDim: number;
+  nKVHeads: number;
+}
 
 /**
  * The base class of KV cache.
@@ -10,12 +15,12 @@ export abstract class BaseKVCache {
   offset = 0;
   step = 256;
 
-  static createForModel<T extends BaseKVCache>(
-      model: BaseModel,
+  static create<T extends BaseKVCache>(
+      options: KVCacheOptions,
       construct: new (headDim: number, nKVHeads: number) => T) {
     const cache: BaseKVCache[] = [];
-    for (let i = 0; i < model.layers.length; ++i)
-      cache[i] = new construct(model.headDim, model.nKVHeads);
+    for (let i = 0; i < options.nLayers; ++i)
+      cache[i] = new construct(options.headDim, options.nKVHeads);
     return cache;
   }
 
@@ -38,8 +43,8 @@ export class KVCache extends BaseKVCache {
     super();
   }
 
-  static override createForModel(model: BaseModel) {
-    return BaseKVCache.createForModel<KVCache>(model, KVCache);
+  static override create(options: KVCacheOptions) {
+    return BaseKVCache.create<KVCache>(options, KVCache);
   }
 
   override updateAndFetch(keys: mx.array, values: mx.array): [ mx.array, mx.array ] {
@@ -87,8 +92,8 @@ export class RotatingKVCache extends BaseKVCache {
   vHeadDim: number;
   #idx = 0;
 
-  static override createForModel(model: BaseModel) {
-    return BaseKVCache.createForModel(model, RotatingKVCache);
+  static override create(options: KVCacheOptions) {
+    return BaseKVCache.create(options, RotatingKVCache);
   }
 
   constructor(headDim: number,

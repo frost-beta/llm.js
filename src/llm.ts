@@ -99,7 +99,7 @@ export class LLM {
     // If not specified, create a shared cache between generations.
     if (!options.kvCache) {
       if (!this.kvCache)
-        this.kvCache = KVCache.createForModel(this.model);
+        this.kvCache = KVCache.create(this.model.getDecoderKVCacheOptions());
       options.kvCache = this.kvCache;
     }
     // Predict next tokens.

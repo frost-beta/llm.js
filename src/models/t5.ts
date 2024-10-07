@@ -1,6 +1,6 @@
 import {core as mx, nn} from '@frost-beta/mlx';
 import {BaseModel, baseModelArgs, createAttentionMask} from '../base.js';
-import {BaseKVCache} from '../kv-cache.js';
+import {KVCacheOptions, BaseKVCache} from '../kv-cache.js';
 
 export interface ModelArgs {
   classifierDropout: number;
@@ -393,19 +393,15 @@ export class Model extends BaseModel {
     return y;
   }
 
-  override encodeTextEmbeddings(embeddings: mx.array, cache?: BaseKVCache[]): mx.array {
+  override encodeEmbeddings(embeddings: mx.array): mx.array {
     return this.encoder.forward(embeddings);
   }
 
-  override get layers() {
-    return this.decoder.block;
-  }
-
-  override get headDim() {
-    return this.args.dKv;
-  }
-
-  override get nKVHeads() {
-    return this.args.numHeads;
+  override getDecoderKVCacheOptions(): KVCacheOptions {
+    return {
+      nLayers: this.decoder.block.length,
+      headDim: this.args.dKv,
+      nKVHeads: this.args.numHeads,
+    };
   }
 }

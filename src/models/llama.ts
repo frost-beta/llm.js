@@ -1,6 +1,6 @@
 import {core as mx, nn} from '@frost-beta/mlx';
 import {BaseModel, baseModelArgs, createAttentionMask} from '../base.js';
-import {BaseKVCache} from '../kv-cache.js';
+import {KVCacheOptions, BaseKVCache} from '../kv-cache.js';
 
 export interface RopeScaling {
   type?: string;
@@ -283,15 +283,11 @@ export class Model extends BaseModel {
       return this.lmHead.forward(out);
   }
 
-  override get layers() {
-    return this.model.layers;
-  }
-
-  override get headDim() {
-    return Math.floor(this.args.hiddenSize / this.args.numAttentionHeads);
-  }
-
-  override get nKVHeads() {
-    return this.args.numKeyValueHeads;
+  override getDecoderKVCacheOptions(): KVCacheOptions {
+    return {
+      nLayers: this.model.layers.length,
+      headDim: this.args.hiddenSize / this.args.numAttentionHeads,
+      nKVHeads: this.args.numKeyValueHeads,
+    };
   }
 }

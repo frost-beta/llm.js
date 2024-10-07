@@ -1,6 +1,6 @@
 import {core as mx, nn} from '@frost-beta/mlx';
 import {BaseModel, baseModelArgs} from '../base.js';
-import {BaseKVCache} from '../kv-cache.js';
+import {KVCacheOptions, BaseKVCache} from '../kv-cache.js';
 import {VisionConfig, VisionModel} from './llava/vision.js';
 import * as llama from './llama.js';
 
@@ -121,15 +121,7 @@ export class Model extends BaseModel {
     }
   }
 
-  override get layers() {
-    return this.languageModel.layers as nn.Module[];
-  }
-
-  override get headDim() {
-    return this.languageModel.headDim;
-  }
-
-  override get nKVHeads() {
-    return this.languageModel.nKVHeads;
+  override getDecoderKVCacheOptions(): KVCacheOptions {
+    return this.languageModel.getDecoderKVCacheOptions();
   }
 }
