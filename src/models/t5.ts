@@ -398,10 +398,6 @@ export class Model extends BaseModel {
   }
 
   override getDecoderKVCacheOptions(): KVCacheOptions {
-    return {
-      nLayers: this.decoder.block.length,
-      headDim: this.args.dKv,
-      nKVHeads: this.args.numHeads,
-    };
+    return {nLayers: this.decoder.block.length};
   }
 }

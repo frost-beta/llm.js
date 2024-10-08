@@ -119,13 +119,16 @@ export function baseModelArgs<T>(args: T): T {
 }
 
 /**
- * Create an additive causal mask.
+ * Create causal mask.
  */
-export function createAdditiveCausalMask(N: number, offset = 0) {
-  const rinds = mx.arange(offset + N);
-  const linds = offset ? mx.arange(offset, offset + N) : rinds;
-  const mask = mx.less(linds.index(mx.Slice(), mx.newaxis),
-                       rinds.index(mx.newaxis));
+export function createCausalMask(N: number, offset = 0, windowSize?: number) {
+  let rinds = mx.arange(offset + N);
+  let linds = offset ? mx.arange(offset, offset + N) : rinds;
+  rinds = rinds.index(mx.newaxis);
+  linds = linds.index(mx.Slice(), mx.newaxis);
+  let mask = mx.less(linds, rinds);
+  if (windowSize !== undefined)
+    mask = mx.bitwiseOr(mask, mx.greater(linds, mx.add(rinds, windowSize)));
   return mx.multiply(mask, -1e9);
 }
 
@@ -135,17 +138,14 @@ export function createAdditiveCausalMask(N: number, offset = 0) {
 export function createAttentionMask(h: mx.array, cache?: BaseKVCache[]) {
   const T = h.shape[1];
   if (T > 1) {
-    let offset: number;
+    let windowSize: number | undefined;
+    let offset = 0;
     if (cache) {
-      const c = cache[0];
-      if (c instanceof RotatingKVCache)
-        offset = Math.min(c.maxSize - 1, c.offset);
-      else
-        offset = c.offset;
-    } else {
-      offset = 0;
+      offset = cache[0].offset;
+      if (cache[0] instanceof RotatingKVCache)
+        windowSize = cache[0].maxSize;
     }
-    return createAdditiveCausalMask(T, offset).astype(h.dtype);
+    return createCausalMask(T, offset, windowSize).astype(h.dtype);
   } else {
     return null;
   }

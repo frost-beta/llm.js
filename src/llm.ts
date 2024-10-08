@@ -1,7 +1,7 @@
 import {fileURLToPath} from 'node:url';
 import {core as mx} from '@frost-beta/mlx';
 import {BaseModel, StepOptions, loadModel, step} from './base.js';
-import {BaseKVCache, KVCache} from './kv-cache.js';
+import {BaseKVCache, KVCache, RotatingKVCache} from './kv-cache.js';
 import {ChatTemplateOptions, Message, Tokenizer} from './tokenizer.js';
 import {ImageInputType, ImageProcessor} from './image-processor.js';
 
@@ -10,6 +10,7 @@ import {ImageInputType, ImageProcessor} from './image-processor.js';
  */
 export interface LLMGenerateOptions extends StepOptions {
   maxTokens?: number;
+  maxKVSize?: number;
 }
 
 /**
@@ -20,6 +21,10 @@ export function parseArgs(args: string[]): [ string[], LLMGenerateOptions ] {
   args = args.filter((arg) => {
     if (arg.startsWith('--max-tokens=')) {
       options.maxTokens = parseInt(arg.substring(arg.indexOf('=') + 1));
+      return false;
+    }
+    if (arg.startsWith('--max-kv-size=')) {
+      options.maxKVSize = parseInt(arg.substring(arg.indexOf('=') + 1));
       return false;
     }
     if (arg.startsWith('--temperature=')) {
@@ -98,8 +103,13 @@ export class LLM {
     this.model.eval();
     // If not specified, create a shared cache between generations.
     if (!options.kvCache) {
-      if (!this.kvCache)
-        this.kvCache = KVCache.create(this.model.getDecoderKVCacheOptions());
+      if (!this.kvCache) {
+        const kvCacheOptions = this.model.getDecoderKVCacheOptions();
+        if (options.maxKVSize)
+          this.kvCache = RotatingKVCache.create(kvCacheOptions, options.maxKVSize);
+        else
+          this.kvCache = KVCache.create(kvCacheOptions);
+      }
       options.kvCache = this.kvCache;
     }
     // Predict next tokens.
