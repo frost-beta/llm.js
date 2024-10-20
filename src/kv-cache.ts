@@ -99,7 +99,6 @@ export class RotatingKVCache extends BaseKVCache {
   #idx = 0;
 
   static override create(options: KVCacheOptions, ...args: any[]) {
-    console.log(args);
     return BaseKVCache.create(options, RotatingKVCache, ...args);
   }
 

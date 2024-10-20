@@ -80,11 +80,9 @@ async function talk(rl: readline.Interface,
 
   // Cleanup.
   mx.dispose(promptEmbeds);
-  if (mx.metal.isAvailable()) {
-    // After a conversation, we know it will take a while before next input and
-    // it is good chance to just release all the memory cache.
-    mx.metal.clearCache();
-  }
   rl.removeListener('SIGINT', abort);
+  // After a conversation, we know it will take a while before next input and
+  // it is good chance to just release all the memory cache.
+  mx.metal.clearCache();
   return result;
 }

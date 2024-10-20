@@ -229,6 +229,7 @@ export async function* step(promptEmbeds: mx.array,
   if (model.hasEncoder) {
     nextToken = model.decoderStartToken;
     memory = model.encodeEmbeddings(promptEmbeds);
+    mx.metal.clearCache();
   } else {
     // Forward prompt by steps so we don't use too much RAM.
     // See also https://github.com/ml-explore/mlx-examples/pull/931
@@ -249,6 +250,7 @@ export async function* step(promptEmbeds: mx.array,
         // Keep the cache from being released.
         return cache;
       });
+      mx.metal.clearCache();
     }
   }
 

@@ -91,8 +91,7 @@ export class LLM {
     const pixelEmbeds = pixelEmbedsList.length > 0 ? mx.concatenate(pixelEmbedsList, 0)
                                                    : undefined;
     const embeddings = this.tokensToEmbeddings(tokens, pixelEmbeds);
-    mx.dispose(pixelEmbeds);
-    mx.dispose(pixelEmbedsList);
+    mx.dispose(pixelEmbeds, pixelEmbedsList);
     return embeddings;
   }
 
@@ -100,7 +99,6 @@ export class LLM {
    * Predict next tokens using the embeddings of prompt.
    */
   async *generate(promptEmbeds: mx.array, options: LLMGenerateOptions = {}) {
-    this.model.eval();
     // If not specified, create a shared cache between generations.
     if (!options.kvCache) {
       if (!this.kvCache) {
