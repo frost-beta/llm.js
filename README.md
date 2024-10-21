@@ -48,7 +48,7 @@ export class LLM {
     /**
      * Predict next tokens using the embeddings of prompt.
      */
-    async *generate(promptEmbeds: mx.array, options?: LLMGenerateOptions): AsyncGenerator<string, void, unknown>;
+    async *generate(promptEmbeds: mx.array, options?: LLMGenerateOptions): AsyncGenerator<string[], void, unknown>;
 }
 
 /**

@@ -210,7 +210,9 @@ export async function* step(promptEmbeds: mx.array,
                               kvCache,
                               topP = 0.8,
                               temperature = 1,
-                            }: StepOptions = {}): AsyncGenerator<number, void> {
+                            }: StepOptions = {}): AsyncGenerator<number[], void> {
+  const [ batchSize, embeddingsSize ] = promptEmbeds.shape;
+
   // Create KV Cache if none is specified in options.
   const cache = kvCache ?? RotatingKVCache.create(model.getDecoderKVCacheOptions());
 
@@ -219,22 +221,21 @@ export async function* step(promptEmbeds: mx.array,
     logits = logits.index(mx.Slice(), -1);
     const [ token ] = sample(logits, topP, temperature);
     await mx.asyncEval(token);
-    return token.item() as number;
+    return token.tolist() as number[];
   };
 
   // Handle prompt: for encoder-decoder models we pass it to encoder, fo
   // decoder-only models we pass it to decoder directly.
-  let nextToken: number;
+  let nextTokens: number[];
   let memory: mx.array | undefined;
   if (model.hasEncoder) {
-    nextToken = model.decoderStartToken;
+    nextTokens = new Array(batchSize).fill(model.decoderStartToken);
     memory = model.encodeEmbeddings(promptEmbeds);
     mx.metal.clearCache();
   } else {
     // Forward prompt by steps so we don't use too much RAM.
     // See also https://github.com/ml-explore/mlx-examples/pull/931
     const prefillStepSize = 512;
-    const embeddingsSize = promptEmbeds.shape[1];
     for (let offset = 0; offset < embeddingsSize;) {
       if (signal?.aborted)
         break;
@@ -246,7 +247,7 @@ export async function* step(promptEmbeds: mx.array,
         offset += size;
         // Do token-by-token generation after prompt is consumed.
         if (offset == embeddingsSize)
-          nextToken = await predict(logits);
+          nextTokens = await predict(logits);
         // Keep the cache from being released.
         return cache;
       });
@@ -256,17 +257,17 @@ export async function* step(promptEmbeds: mx.array,
 
   do {
     // Quit after getting EOS.
-    if (nextToken == eosToken)
+    if (nextTokens.indexOf(eosToken) > -1)
       break;
     // The generation is aborted.
     if (signal?.aborted)
       break;
     // Do not yield token if it is the decoderStartToken.
-    if (!(model.hasEncoder && nextToken == model.decoderStartToken))
-      yield nextToken;
+    if (!(model.hasEncoder && nextTokens.indexOf(model.decoderStartToken) > -1))
+      yield nextTokens;
     // Forward the token to model and free intermediate tensors.
-    [ nextToken ] = await mx.tidy(async () => {
-      const logits = model.forward(mx.array([ [ nextToken ] ], mx.int32), memory, cache);
+    [ nextTokens ] = await mx.tidy(async () => {
+      const logits = model.forward(mx.array(nextTokens, mx.int32).index(mx.Slice(), mx.newaxis), memory, cache);
       // The cache is also returned so it does not get freed by mx.tidy().
       return [ await predict(logits), cache ];
     });

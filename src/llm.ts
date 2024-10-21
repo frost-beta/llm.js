@@ -99,6 +99,7 @@ export class LLM {
    * Predict next tokens using the embeddings of prompt.
    */
   async *generate(promptEmbeds: mx.array, options: LLMGenerateOptions = {}) {
+    const [ batchSize ] = promptEmbeds.shape;
     // If not specified, create a shared cache between generations.
     if (!options.kvCache) {
       if (!this.kvCache) {
@@ -111,22 +112,26 @@ export class LLM {
       options.kvCache = this.kvCache;
     }
     // Predict next tokens.
-    let buffer: number[] = [];
+    let buffers: number[][] = Array.from({length: batchSize}, () => []);
     let count = 0;
-    for await (const token of step(promptEmbeds, this.model, this.tokenizer.eosToken, options)) {
+    for await (const tokens of step(promptEmbeds, this.model, this.tokenizer.eosToken, options)) {
       ++count;
       if (options.maxTokens && count > options.maxTokens)
         break;
-      buffer.push(token);
-      let text = this.tokenizer.decode(buffer);
-      // The token may represent an incomplete unicode char.
-      if (text.endsWith('\u{FFFD}'))
-        continue;
-      // Trim left whitespace for the first output.
-      if (this.tokenizer.trimLeft && count == 1)
-        text = text.trimLeft();
-      yield text;
-      buffer = [];
+      const results: string[] = Array.from({length: batchSize}, () => '');
+      for (let i = 0; i < batchSize; ++ i) {
+        buffers[i].push(tokens[i]);
+        let text = this.tokenizer.decode(buffers[i]);
+        // The token may represent an incomplete unicode char.
+        if (text.endsWith('\u{FFFD}'))
+          continue;
+        // Trim left whitespace for the first output.
+        if (this.tokenizer.trimLeft && count == 1)
+          text = text.trimLeft();
+        results[i] = text;
+        buffers[i] = [];
+      }
+      yield results;
     }
   }
 

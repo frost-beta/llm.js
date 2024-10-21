@@ -14,7 +14,7 @@ main(argv[0], argv[1]);
 async function main(dir: string, prompt?: string) {
   const llm = await loadLLM(dir);
   const promptEmbeds = await llm.encode(prompt);
-  for await (const text of llm.generate(promptEmbeds, options))
+  for await (const [ text ] of llm.generate(promptEmbeds, options))
     process.stdout.write(text);
   process.stdout.write('\n');
 }

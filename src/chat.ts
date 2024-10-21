@@ -66,7 +66,7 @@ async function talk(rl: readline.Interface,
 
   // Predict next tokens.
   let result = '';
-  for await (const text of llm.generate(promptEmbeds, options)) {
+  for await (const [ text ] of llm.generate(promptEmbeds, options)) {
     result += text;
     process.stdout.write(text);
   }
