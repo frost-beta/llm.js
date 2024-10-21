@@ -21,7 +21,7 @@ jobs:
           huggingface download --silent mlx-community/Llama-3.2-1B-Instruct-8bit
           echo 'Who are you?' | yarn tsx src/chat.ts Llama-3.2-1B-Instruct-8bit
 
-          huggingface download --silent mlx-community/llava-1.5-7b-4bit
+          huggingface download --silent mlx-community/llava-1.5-7b-4bit --revision 82b38f2
           echo 'What is in the photo? <image:https://www.techno-edge.net/imgs/zoom/19711.jpg>' | yarn tsx src/chat.ts llava-1.5-7b-4bit --temperature=0
 
           huggingface download --silent Qwen/Qwen2-0.5B
