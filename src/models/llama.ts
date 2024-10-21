@@ -12,10 +12,11 @@ export interface RopeScaling {
 }
 
 export interface ModelArgs {
-  modelType: 'llama';
+  modelType: 'gemma' | 'llama' | 'qwen2';
   attentionBias: boolean;
   attentionOutProjectionBias: boolean;
   headDim?: number;
+  hiddenAct: 'gelu' | 'geluApprox' | 'silu';
   hiddenSize: number;
   intermediateSize: number;
   maxPositionEmbeddings: number;
@@ -39,12 +40,12 @@ export function modelArgs(json: any): ModelArgs {
     ropeTraditional: false,
     tieWordEmbeddings: true,
   }, baseModelArgs(json));
-  if (args.attentionOutProjectionBias == undefined) {
+  if (args.attentionOutProjectionBias === undefined)
     args.attentionOutProjectionBias = args.attentionBias;
-  }
-  if (!args.numKeyValueHeads) {
+  if (args.hiddenAct == undefined)
+    args.hiddenAct = 'silu';
+  if (args.numKeyValueHeads === undefined)
     args.numKeyValueHeads = args.numAttentionHeads;
-  }
   if (args.ropeScaling) {
     if (!args.ropeScaling.factor)
       throw new Error('rope_scaling must contain "factor"')
@@ -55,6 +56,16 @@ export function modelArgs(json: any): ModelArgs {
       throw new Error('rope_scaling "type" currently only supports "linear", "dynamic" or "llama3"');
   }
   return args;
+}
+
+export class GemmaRMSNorm extends nn.RMSNorm {
+  constructor(dims: number, eps: number) {
+    super(dims, eps);
+  }
+
+  override forward(x: mx.array): mx.array {
+    return mx.fast.rmsNorm(x, mx.add(1, this.weight), this.eps);
+  }
 }
 
 class DynamicNTKScalingRoPE extends nn.Module {
@@ -191,6 +202,7 @@ class MLP extends nn.Module {
   gateProj: nn.Linear;
   downProj: nn.Linear;
   upProj: nn.Linear;
+  activation: (x: mx.array) => mx.array;
 
   constructor(args: ModelArgs) {
     super();
@@ -202,10 +214,11 @@ class MLP extends nn.Module {
     this.gateProj = new nn.Linear(dim, hiddenDim, mlpBias);
     this.downProj = new nn.Linear(hiddenDim, dim, mlpBias);
     this.upProj = new nn.Linear(dim, hiddenDim, mlpBias);
+    this.activation = nn[args.hiddenAct as 'silu'];
   }
 
   forward(x: mx.array) {
-    return this.downProj.forward(mx.multiply(nn.silu(this.gateProj.forward(x)),
+    return this.downProj.forward(mx.multiply(this.activation(this.gateProj.forward(x)),
                                              this.upProj.forward(x)));
   }
 }
@@ -220,8 +233,9 @@ class TransformerBlock extends nn.Module {
     super();
     this.selfAttn = new Attention(args);
     this.mlp = new MLP(args);
-    this.inputLayernorm = new nn.RMSNorm(args.hiddenSize, args.rmsNormEps);
-    this.postAttentionLayernorm = new nn.RMSNorm(args.hiddenSize, args.rmsNormEps);
+    const norm = args.modelType == 'gemma' ? GemmaRMSNorm : nn.RMSNorm;
+    this.inputLayernorm = new norm(args.hiddenSize, args.rmsNormEps);
+    this.postAttentionLayernorm = new norm(args.hiddenSize, args.rmsNormEps);
   }
 
   forward(x: mx.array, mask: mx.array, cache?: BaseKVCache) {
@@ -236,6 +250,7 @@ class LlamaModel extends nn.Module {
   embedTokens: nn.Embedding;
   layers: TransformerBlock[];
   norm: nn.RMSNorm;
+  gemmaNormalizer?: number;
 
   constructor(args: ModelArgs) {
     super();
@@ -243,11 +258,18 @@ class LlamaModel extends nn.Module {
     this.layers = [];
     for (let i = 0; i < args.numHiddenLayers; ++i)
       this.layers.push(new TransformerBlock(args));
-    this.norm = new nn.RMSNorm(args.hiddenSize, args.rmsNormEps);
+    if (args.modelType == 'gemma') {
+      this.norm = new GemmaRMSNorm(args.hiddenSize, args.rmsNormEps);
+      this.gemmaNormalizer = args.hiddenSize ** 0.5;
+    } else {
+      this.norm = new nn.RMSNorm(args.hiddenSize, args.rmsNormEps);
+    }
   }
 
   forward(embeddings: mx.array, cache?: BaseKVCache[]) {
     let h = embeddings;
+    if (this.gemmaNormalizer !== undefined)
+      h = mx.multiply(h, this.gemmaNormalizer);
     const mask = createAttentionMask(h, cache);
     for (let i in this.layers)
       h = this.layers[i].forward(h, mask, cache ? cache[i] : undefined);

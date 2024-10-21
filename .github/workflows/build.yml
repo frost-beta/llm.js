@@ -31,6 +31,9 @@ jobs:
           huggingface download --silent Xenova/t5-small --hf  # fix tokenizer
           yarn tsx src/generate.ts --temperature=0 t5-small 'translate English to German: As much as six inches of rain could fall in the New York City region through Monday morning, and officials warned of flooding along the coast.'
 
+          huggingface download --silent mlx-community/codegemma-1.1-2b-8bit
+          yarn tsx src/generate.ts --max-tokens=128 codegemma-1.1-2b-8bit
+
   publish:
     if: startsWith(github.ref, 'refs/tags/')
     needs: [build]
