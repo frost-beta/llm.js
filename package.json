@@ -26,7 +26,7 @@
   },
   "dependencies": {
     "@frost-beta/mlx": "0.0.23",
-    "@lenml/tokenizers": "3.0.1",
+    "@lenml/tokenizers": "3.0.3",
     "sharp": "0.33.5"
   }
 }
