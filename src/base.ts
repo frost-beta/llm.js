@@ -141,9 +141,12 @@ export function createAttentionMask(h: mx.array, cache?: BaseKVCache[]) {
     let windowSize: number | undefined;
     let offset = 0;
     if (cache) {
-      offset = cache[0].offset;
-      if (cache[0] instanceof RotatingKVCache)
+      if (cache[0] instanceof RotatingKVCache) {
+        offset = Math.min(cache[0].offset, cache[0].maxSize);
         windowSize = cache[0].maxSize;
+      } else {
+        offset = cache[0].offset;
+      }
     }
     return createCausalMask(T, offset, windowSize).astype(h.dtype);
   } else {

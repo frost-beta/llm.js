@@ -136,9 +136,9 @@ export class RotatingKVCache extends BaseKVCache {
       this.keys = this.temporalOrder(this.keys);
       this.values = this.temporalOrder(this.values);
 
-      // The largest size is self.max_size + S - 1 to ensure every token gets
+      // The largest size is self.max_size + S to ensure every token gets
       // at least this.maxSize context.
-      const trimSize = this.#idx - this.maxSize + 1;
+      const trimSize = this.#idx - this.maxSize;
       this.keys = this.trim(trimSize, this.keys, keys);
       this.values = this.trim(trimSize, this.values, values);
       mx.dispose(old);
