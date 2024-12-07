@@ -4,6 +4,7 @@ import readline from 'node:readline/promises';
 import {styleText} from 'node:util';
 import {core as mx} from '@frost-beta/mlx';
 import {LLMGenerateOptions, LLM, parseArgs, loadLLM} from './llm.js';
+import {printGenerationLog} from './logging.js';
 import {Message} from './tokenizer.js';
 
 const [ argv, options ] = parseArgs(process.argv.slice(2));
@@ -71,12 +72,7 @@ async function talk(rl: readline.Interface,
     process.stdout.write(text);
   }
   process.stdout.write('\n');
-
-  if (process.env.LLM_DEBUG) {
-    console.log(`Peak memory ${(mx.metal.getPeakMemory() / 1024 ** 2).toFixed(1)}M,`,
-                `Cache memory ${(mx.metal.getCacheMemory() / 1024 ** 2).toFixed(1)}M,`,
-                `Native JS objects ${mx.getWrappersCount()}.`);
-  }
+  printGenerationLog();
 
   // Cleanup.
   mx.dispose(promptEmbeds);

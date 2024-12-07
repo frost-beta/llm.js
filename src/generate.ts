@@ -2,6 +2,7 @@
 
 import {core as mx} from '@frost-beta/mlx';
 import {parseArgs, loadLLM} from './llm.js';
+import {printGenerationLog} from './logging.js';
 
 const [ argv, options ] = parseArgs(process.argv.slice(2));
 if (argv.length < 1) {
@@ -17,4 +18,5 @@ async function main(dir: string, prompt?: string) {
   for await (const [ text ] of llm.generate(promptEmbeds, options))
     process.stdout.write(text);
   process.stdout.write('\n');
+  printGenerationLog();
 }
