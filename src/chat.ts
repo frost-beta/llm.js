@@ -72,10 +72,10 @@ async function talk(rl: readline.Interface,
   }
   process.stdout.write('\n');
 
-  if (false) {  // used for debugging leaks
-    console.log(`MLX RAM ${(mx.metal.getActiveMemory() / 1024 ** 2).toFixed(1)}M,`,
-                `Cache ${(mx.metal.getCacheMemory() / 1024 ** 2).toFixed(1)}M,`,
-                `JS Objects ${mx.getWrappersCount()}.`);
+  if (process.env.LLM_DEBUG) {
+    console.log(`Peak memory ${(mx.metal.getPeakMemory() / 1024 ** 2).toFixed(1)}M,`,
+                `Cache memory ${(mx.metal.getCacheMemory() / 1024 ** 2).toFixed(1)}M,`,
+                `Native JS objects ${mx.getWrappersCount()}.`);
   }
 
   // Cleanup.
