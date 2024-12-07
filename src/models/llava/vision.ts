@@ -141,6 +141,7 @@ class VisionEmbeddings extends nn.Module {
                                         this.patchSize,
                                         undefined,
                                         undefined,
+                                        undefined,
                                         false);
 
     this.numPatches = (this.imageSize / this.patchSize) ** 2;
